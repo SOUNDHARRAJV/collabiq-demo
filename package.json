@@ -1,15 +1,15 @@
 {
-  "name": "react-example",
+  "name": "collabiq-ai-studio",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx server.ts",
+    "dev": "tsx server/index.ts",
     "build": "vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
-    "start": "node server.ts"
+    "start": "node server/index.ts"
   },
   "dependencies": {
     "@google/genai": "^1.45.0",
