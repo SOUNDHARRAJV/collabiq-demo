@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import { Server } from "socket.io";
@@ -86,6 +87,13 @@ async function startServer() {
   // API routes
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok" });
+  });
+
+  app.get("/api/auth/google/status", (req, res) => {
+    res.json({
+      hasGoogleClientId: Boolean(process.env.GOOGLE_CLIENT_ID),
+      hasGoogleClientSecret: Boolean(process.env.GOOGLE_CLIENT_SECRET),
+    });
   });
 
   // Vite middleware for development

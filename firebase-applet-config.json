@@ -1,10 +1,10 @@
 {
-  "projectId": "gen-lang-client-0093853900",
-  "appId": "1:1018456956630:web:324f275bf4b4c76a117377",
-  "apiKey": "AIzaSyAx-YUZyReognM0ofrwAsotLcpxDPFkSOI",
-  "authDomain": "gen-lang-client-0093853900.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-9dca97c2-82a7-4d94-822f-870cd1589133",
-  "storageBucket": "gen-lang-client-0093853900.firebasestorage.app",
-  "messagingSenderId": "1018456956630",
-  "measurementId": ""
+  "projectId": "collabiq-51e65",
+  "appId": "1:1020884207580:web:b01170b7177c78f9f8f119",
+  "apiKey": "AIzaSyBMr7qA1prAQ5soo5GlTFUJJ6p1mUNDmSc",
+  "authDomain": "collabiq-51e65.firebaseapp.com",
+  "firestoreDatabaseId": "(default)",
+  "storageBucket": "collabiq-51e65.firebasestorage.app",
+  "messagingSenderId": "1020884207580",
+  "measurementId": "G-ZT933PCL7P"
 }

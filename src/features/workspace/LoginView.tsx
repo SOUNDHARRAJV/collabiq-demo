@@ -11,9 +11,15 @@ import { cn } from '../../lib/utils';
 export function LoginView() {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const { showToast } = useToast();
+  const googleClientId = process.env.GOOGLE_CLIENT_ID;
 
   const handleLogin = async () => {
     console.log('handleLogin triggered');
+    if (!googleClientId) {
+      showToast('Google login is not configured. Set GOOGLE_CLIENT_ID in your environment.', 'error');
+      return;
+    }
+
     setIsLoggingIn(true);
     try {
       const provider = new GoogleAuthProvider();
@@ -32,6 +38,10 @@ export function LoginView() {
         errorMessage = 'Login was cancelled.';
       } else if (error.code === 'auth/popup-closed-by-user') {
         errorMessage = 'Login window was closed before completion.';
+      } else if (error.code === 'auth/unauthorized-domain') {
+        errorMessage = `Google login is not enabled for this domain (${window.location.hostname}). In Firebase Console: Authentication -> Settings -> Authorized domains, add this domain and try again.`;
+      } else if (error.code === 'auth/operation-not-allowed') {
+        errorMessage = 'Google sign-in is disabled in Firebase. Enable it in Firebase Console: Authentication -> Sign-in method -> Google.';
       }
       
       showToast(errorMessage, 'error');
