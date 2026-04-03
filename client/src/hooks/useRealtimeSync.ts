@@ -24,7 +24,7 @@ export function useRealtimeSync() {
   useEffect(() => {
     if (!activeWorkspace?.id) return;
 
-    // Messages
+    // Messages (ordered by timestamp, oldest first)
     const messagesPath = `workspaces/${activeWorkspace.id}/messages`;
     const qMessages = query(
       collection(db, messagesPath),
@@ -32,9 +32,12 @@ export function useRealtimeSync() {
     );
     const unsubMessages = onSnapshot(qMessages, (snapshot) => {
       setMessages(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Message)));
-    }, (error) => handleFirestoreError(error, OperationType.GET, messagesPath));
+    }, (error) => {
+      console.error('Failed to sync messages:', error);
+      // Don't throw - gracefully degrade; Firestore listeners keep retrying
+    });
 
-    // Tasks
+    // Tasks (ordered by creation date, newest first)
     const tasksPath = `workspaces/${activeWorkspace.id}/tasks`;
     const qTasks = query(
       collection(db, tasksPath),
@@ -42,9 +45,12 @@ export function useRealtimeSync() {
     );
     const unsubTasks = onSnapshot(qTasks, (snapshot) => {
       setTasks(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Task)));
-    }, (error) => handleFirestoreError(error, OperationType.GET, tasksPath));
+    }, (error) => {
+      console.error('Failed to sync tasks:', error);
+      // Don't throw - gracefully degrade
+    });
 
-    // Documents
+    // Documents (ordered by update time, newest first)
     const docsPath = `workspaces/${activeWorkspace.id}/documents`;
     const qDocs = query(
       collection(db, docsPath),
@@ -52,9 +58,12 @@ export function useRealtimeSync() {
     );
     const unsubDocs = onSnapshot(qDocs, (snapshot) => {
       setDocuments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Document)));
-    }, (error) => handleFirestoreError(error, OperationType.GET, docsPath));
+    }, (error) => {
+      console.error('Failed to sync documents:', error);
+      // Don't throw - gracefully degrade
+    });
 
-    // Decisions
+    // Decisions (ordered by timestamp, newest first)
     const decisionsPath = `workspaces/${activeWorkspace.id}/decisions`;
     const qDecisions = query(
       collection(db, decisionsPath),
@@ -62,9 +71,12 @@ export function useRealtimeSync() {
     );
     const unsubDecisions = onSnapshot(qDecisions, (snapshot) => {
       setDecisions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Decision)));
-    }, (error) => handleFirestoreError(error, OperationType.GET, decisionsPath));
+    }, (error) => {
+      console.error('Failed to sync decisions:', error);
+      // Don't throw - gracefully degrade
+    });
 
-    // Risks
+    // Risks (ordered by timestamp, newest first)
     const risksPath = `workspaces/${activeWorkspace.id}/risks`;
     const qRisks = query(
       collection(db, risksPath),
@@ -72,9 +84,12 @@ export function useRealtimeSync() {
     );
     const unsubRisks = onSnapshot(qRisks, (snapshot) => {
       setRisks(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Risk)));
-    }, (error) => handleFirestoreError(error, OperationType.GET, risksPath));
+    }, (error) => {
+      console.error('Failed to sync risks:', error);
+      // Don't throw - gracefully degrade
+    });
 
-    // Members
+    // Members (no specific order, all members in workspace)
     const membersPath = `workspaces/${activeWorkspace.id}/members`;
     const qMembers = query(collection(db, membersPath));
     const unsubMembers = onSnapshot(qMembers, (snapshot) => {
@@ -86,24 +101,31 @@ export function useRealtimeSync() {
       if (currentUserMember) {
         setUserRole(currentUserMember.role);
       }
-    }, (error) => handleFirestoreError(error, OperationType.GET, membersPath));
+    }, (error) => {
+      console.error('Failed to sync members:', error);
+      // Don't throw - gracefully degrade
+    });
 
-    // Workspace Metadata (for name updates)
+    // Workspace Metadata (for name and member updates)
     const workspacePath = `workspaces/${activeWorkspace.id}`;
     const unsubWorkspace = onSnapshot(doc(db, 'workspaces', activeWorkspace.id), (snapshot) => {
       if (snapshot.exists()) {
         setActiveWorkspace({ id: snapshot.id, ...snapshot.data() } as Workspace);
       }
-    }, (error) => handleFirestoreError(error, OperationType.GET, workspacePath));
+    }, (error) => {
+      console.error('Failed to sync workspace:', error);
+      // Don't throw - gracefully degrade
+    });
 
     return () => {
-      unsubMessages();
-      unsubTasks();
-      unsubDocs();
-      unsubDecisions();
-      unsubRisks();
-      unsubMembers();
-      unsubWorkspace();
+      // Safely unsubscribe from all listeners
+      try { unsubMessages(); } catch (e) { console.debug('Error unsubbing messages:', e); }
+      try { unsubTasks(); } catch (e) { console.debug('Error unsubbing tasks:', e); }
+      try { unsubDocs(); } catch (e) { console.debug('Error unsubbing docs:', e); }
+      try { unsubDecisions(); } catch (e) { console.debug('Error unsubbing decisions:', e); }
+      try { unsubRisks(); } catch (e) { console.debug('Error unsubbing risks:', e); }
+      try { unsubMembers(); } catch (e) { console.debug('Error unsubbing members:', e); }
+      try { unsubWorkspace(); } catch (e) { console.debug('Error unsubbing workspace:', e); }
     };
-  }, [activeWorkspace?.id, user?.uid]);
+  }, [activeWorkspace?.id, user?.uid, setMessages, setTasks, setDocuments, setDecisions, setRisks, setMembers, setUserRole, setActiveWorkspace]);
 }

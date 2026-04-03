@@ -11,7 +11,7 @@ import { cn } from '../../lib/utils';
 export function LoginView() {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const { showToast } = useToast();
-  const googleClientId = process.env.GOOGLE_CLIENT_ID;
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
   const handleLogin = async () => {
     console.log('handleLogin triggered');

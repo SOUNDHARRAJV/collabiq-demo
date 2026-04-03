@@ -5,6 +5,7 @@ import { useAuthStore } from './store/useAuthStore';
 import { useWorkspaceStore } from './store/useWorkspaceStore';
 import { useUIStore } from './store/useUIStore';
 import { useRealtimeSync } from './hooks/useRealtimeSync';
+import { useSocket } from './hooks/useSocket';
 import { useToast } from './features/notifications/ToastProvider';
 
 // Layouts & Views
@@ -31,12 +32,19 @@ export default function App() {
   const { activeView } = useUIStore();
   const { showToast } = useToast();
 
-  // Initialize Real-time Sync
+  // Initialize Real-time Sync (Firestore)
   useRealtimeSync();
+
+  // Initialize Socket.io for presence tracking
+  useSocket();
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setUser(user);
+      if (!user) {
+        // Reset workspace state on logout to prevent leaking data to next user
+        useWorkspaceStore.getState().reset();
+      }
       setLoading(false);
     });
     return () => unsubscribe();

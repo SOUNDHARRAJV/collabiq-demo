@@ -36,10 +36,10 @@ export function MainLayout({ children }: MainLayoutProps) {
 
   const navItems = [
     { id: 'chat', icon: MessageSquare, label: 'Discussion' },
-    { id: 'board', icon: Layout, label: 'Kanban Board' },
-    { id: 'docs', icon: FileText, label: 'Documents' },
+    { id: 'kanban', icon: Layout, label: 'Kanban Board' },
+    { id: 'documents', icon: FileText, label: 'Documents' },
     { id: 'analytics', icon: BarChart2, label: 'Analytics' },
-    { id: 'insights', icon: Sparkles, label: 'AI Insights' },
+    { id: 'ai-insights', icon: Sparkles, label: 'AI Insights' },
     { id: 'workspace', icon: Users, label: 'Workspace' },
     { id: 'settings', icon: Settings, label: 'Settings' },
   ];

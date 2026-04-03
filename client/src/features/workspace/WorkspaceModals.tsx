@@ -8,7 +8,7 @@ import { GlassCard } from '../../components/ui/GlassCard';
 import { GlassButton } from '../../components/ui/GlassButton';
 import { GlassInput } from '../../components/ui/GlassInput';
 import { db } from '../../firebase';
-import { doc, updateDoc, deleteDoc, collection, addDoc, setDoc, getDoc, getDocFromServer } from 'firebase/firestore';
+import { doc, updateDoc, deleteDoc, collection, addDoc, setDoc, getDoc, getDocFromServer, arrayUnion } from 'firebase/firestore';
 import { cn, formatDate } from '../../lib/utils';
 import { Modal } from '../../components/Modal';
 import { InputModal } from '../../components/InputModal';
@@ -35,7 +35,7 @@ export function WorkspaceModals({ showToast }: { showToast: (msg: string, type?:
       
       await setDoc(doc(db, 'workspaces', workspaceId), workspaceData);
       
-      // Add creator as admin member
+      // Add creator as admin member (merge:true preserves existing fields)
       await setDoc(doc(db, `workspaces/${workspaceId}/members`, user.uid), {
         uid: user.uid,
         email: user.email,
@@ -43,7 +43,7 @@ export function WorkspaceModals({ showToast }: { showToast: (msg: string, type?:
         photoURL: user.photoURL,
         role: 'admin',
         joinedAt: Date.now()
-      });
+      }, { merge: true });
 
       setActiveWorkspace({ id: workspaceId, ...workspaceData });
       showToast('Workspace created!');
@@ -72,12 +72,12 @@ export function WorkspaceModals({ showToast }: { showToast: (msg: string, type?:
         return;
       }
 
-      // Add user to members array
+      // Use arrayUnion to atomically add user to members (avoids race conditions)
       await updateDoc(doc(db, 'workspaces', workspaceId), {
-        members: [...wsData.members, user.uid]
+        members: arrayUnion(user.uid)
       });
 
-      // Add user to members subcollection
+      // Add user to members subcollection (merge:true preserves existing fields)
       await setDoc(doc(db, `workspaces/${workspaceId}/members`, user.uid), {
         uid: user.uid,
         email: user.email,
@@ -85,7 +85,7 @@ export function WorkspaceModals({ showToast }: { showToast: (msg: string, type?:
         photoURL: user.photoURL,
         role: 'member',
         joinedAt: Date.now()
-      });
+      }, { merge: true });
 
       setActiveWorkspace({ id: workspaceId, ...wsData } as any);
       showToast('Joined workspace!');

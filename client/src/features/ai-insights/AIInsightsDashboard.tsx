@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, CheckCircle2, AlertTriangle, ListTodo, Clock, RefreshCw, FileText, ChevronRight, MessageSquare, Layout } from 'lucide-react';
 import { useWorkspaceStore } from '../../store/useWorkspaceStore';
 import { useUIStore } from '../../store/useUIStore';
+import { useToast } from '../notifications/ToastProvider';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { GlassButton } from '../../components/ui/GlassButton';
 import { generateWorkspaceReport } from '../../services';
@@ -11,6 +12,7 @@ import { cn, formatDate } from '../../lib/utils';
 export function AIInsightsDashboard() {
   const { activeWorkspace, tasks, decisions, risks } = useWorkspaceStore();
   const { setModal } = useUIStore();
+  const { showToast } = useToast();
   const [isGenerating, setIsGenerating] = useState(false);
 
   const handleGenerateReport = async () => {
@@ -24,8 +26,10 @@ export function AIInsightsDashboard() {
         risks.map(r => r.text)
       );
       setModal({ type: 'viewReport', data: { report } });
+      showToast('Status report generated successfully');
     } catch (error) {
       console.error('Failed to generate report:', error);
+      showToast('Failed to generate report. Please try again.', 'error');
     } finally {
       setIsGenerating(false);
     }

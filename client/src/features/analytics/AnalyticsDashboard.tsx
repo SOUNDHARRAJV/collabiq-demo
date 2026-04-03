@@ -52,7 +52,7 @@ export function AnalyticsDashboard() {
 
   useEffect(() => {
     handleRefreshInsights();
-  }, [tasks.length]);
+  }, [tasks]);
 
   const stats = [
     { label: 'Total Tasks', value: tasks.length, icon: Layout, color: 'text-white' },

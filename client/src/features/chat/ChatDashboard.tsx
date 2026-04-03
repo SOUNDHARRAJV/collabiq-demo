@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Send, Sparkles, User, Clock, MessageSquare } from 'lucide-react';
 import { useWorkspaceStore } from '../../store/useWorkspaceStore';
 import { useAuthStore } from '../../store/useAuthStore';
+import { useToast } from '../notifications/ToastProvider';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { GlassButton } from '../../components/ui/GlassButton';
 import { GlassInput } from '../../components/ui/GlassInput';
@@ -15,6 +16,7 @@ import { handleFirestoreError, OperationType } from '../../lib/firestore-utils';
 export function ChatDashboard() {
   const { user } = useAuthStore();
   const { activeWorkspace, messages, setDecisions, setRisks, setTasks } = useWorkspaceStore();
+  const { showToast } = useToast();
   const [newMessage, setNewMessage] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -53,6 +55,9 @@ export function ChatDashboard() {
     try {
       const analysis = await analyzeDiscussion(messages.slice(-20));
       
+      // Check if analysis included any results
+      const totalResults = analysis.tasks.length + analysis.decisions.length + analysis.risks.length;
+      
       // Save analysis results to Firestore
       for (const task of analysis.tasks) {
         const path = `workspaces/${activeWorkspace.id}/tasks`;
@@ -88,8 +93,16 @@ export function ChatDashboard() {
           handleFirestoreError(e, OperationType.CREATE, path);
         }
       }
+      
+      // Provide feedback on what was extracted
+      if (totalResults > 0) {
+        showToast(`Analysis complete: ${analysis.tasks.length} tasks, ${analysis.decisions.length} decisions, ${analysis.risks.length} risks extracted.`, 'success');
+      } else {
+        showToast('Analysis complete but no insights extracted. Try discussing more details.', 'info');
+      }
     } catch (error) {
       console.error('Analysis failed:', error);
+      showToast('AI analysis failed. Please try again later.', 'error');
     } finally {
       setIsAnalyzing(false);
     }
