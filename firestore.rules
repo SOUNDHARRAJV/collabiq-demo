@@ -1,0 +1,195 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: workspaces
+    // Document ID: auto-generated
+    // Fields:
+    //   - name: string (required)
+    //   - ownerId: string (required)
+    //   - members: list (required)
+    //   - createdAt: number (required)
+    //
+    // Collection: workspaces/{workspaceId}/members
+    // Document ID: userId
+    // Fields:
+    //   - uid: string (required)
+    //   - email: string (required)
+    //   - displayName: string (required)
+    //   - photoURL: string (optional)
+    //   - role: string (required, 'admin' | 'member')
+    //
+    // Collection: workspaces/{workspaceId}/messages
+    // Document ID: auto-generated
+    // Fields:
+    //   - text: string (required)
+    //   - userId: string (required)
+    //   - userName: string (required)
+    //   - userPhoto: string (optional)
+    //   - timestamp: number (required)
+    //
+    // Collection: workspaces/{workspaceId}/tasks
+    // Document ID: auto-generated
+    // Fields:
+    //   - title: string (required)
+    //   - description: string (optional)
+    //   - status: string (required, 'backlog' | 'todo' | 'in-progress' | 'review' | 'done')
+    //   - priority: string (required, 'low' | 'medium' | 'high' | 'urgent')
+    //   - assigneeId: string (optional)
+    //   - dueDate: string (optional)
+    //   - createdAt: number (required)
+    //
+    // Collection: workspaces/{workspaceId}/documents
+    // Document ID: auto-generated
+    // Fields:
+    //   - title: string (required)
+    //   - content: string (required)
+    //   - lastEditedBy: string (required)
+    //   - updatedAt: number (required)
+    //
+    // Collection: workspaces/{workspaceId}/decisions
+    // Document ID: auto-generated
+    // Fields:
+    //   - text: string (required)
+    //   - timestamp: number (required)
+    //
+    // Collection: workspaces/{workspaceId}/risks
+    // Document ID: auto-generated
+    // Fields:
+    //   - text: string (required)
+    //   - timestamp: number (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "soundharvellingiri5912@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isWorkspaceMember(workspaceId) {
+      return isAuthenticated() && 
+        (exists(/databases/$(database)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid)) ||
+         request.auth.uid in get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.members);
+    }
+
+    function isWorkspaceAdmin(workspaceId) {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/workspaces/$(workspaceId)/members/$(request.auth.uid)).data.role == 'admin' ||
+         get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.ownerId == request.auth.uid);
+    }
+
+    function isValidWorkspace(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.ownerId is string &&
+             data.members is list &&
+             data.createdAt is number;
+    }
+
+    function isValidMember(data) {
+      return data.uid is string &&
+             data.email is string &&
+             data.displayName is string &&
+             data.role in ['admin', 'member'];
+    }
+
+    function isValidMessage(data) {
+      return data.text is string && data.text.size() > 0 && data.text.size() < 5000 &&
+             data.userId == request.auth.uid &&
+             data.timestamp is number;
+    }
+
+    function isValidTask(data) {
+      return data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
+             data.status in ['backlog', 'todo', 'in-progress', 'review', 'done'] &&
+             data.priority in ['low', 'medium', 'high', 'urgent'] &&
+             data.createdAt is number;
+    }
+
+    function isValidDocument(data) {
+      return data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
+             data.content is string &&
+             data.lastEditedBy == request.auth.uid &&
+             data.updatedAt is number;
+    }
+
+    function isValidDecision(data) {
+      return data.text is string && data.text.size() > 0 && data.text.size() < 1000 &&
+             data.timestamp is number;
+    }
+
+    function isValidRisk(data) {
+      return data.text is string && data.text.size() > 0 && data.text.size() < 1000 &&
+             data.timestamp is number;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /workspaces/{workspaceId} {
+      allow read: if isWorkspaceMember(workspaceId);
+      allow create: if isAuthenticated() && isValidWorkspace(request.resource.data);
+      allow update: if isWorkspaceAdmin(workspaceId) && isValidWorkspace(request.resource.data);
+      allow delete: if isWorkspaceAdmin(workspaceId);
+
+      match /members/{userId} {
+        allow read: if isWorkspaceMember(workspaceId);
+        allow create: if (isAuthenticated() && userId == request.auth.uid) || isWorkspaceAdmin(workspaceId);
+        allow update: if isWorkspaceAdmin(workspaceId) && isValidMember(request.resource.data);
+        allow delete: if isWorkspaceAdmin(workspaceId) && userId != get(/databases/$(database)/documents/workspaces/$(workspaceId)).data.ownerId;
+      }
+
+      match /messages/{messageId} {
+        allow read: if isWorkspaceMember(workspaceId);
+        allow create: if isWorkspaceMember(workspaceId) && isValidMessage(request.resource.data);
+        allow update: if false; // Messages are immutable for now
+        allow delete: if isWorkspaceMember(workspaceId) && (resource.data.userId == request.auth.uid || isWorkspaceAdmin(workspaceId));
+      }
+
+      match /tasks/{taskId} {
+        allow read: if isWorkspaceMember(workspaceId);
+        allow create: if isWorkspaceMember(workspaceId) && isValidTask(request.resource.data);
+        allow update: if isWorkspaceMember(workspaceId) && isValidTask(request.resource.data);
+        allow delete: if isWorkspaceMember(workspaceId);
+      }
+
+      match /documents/{docId} {
+        allow read: if isWorkspaceMember(workspaceId);
+        allow create: if isWorkspaceMember(workspaceId) && isValidDocument(request.resource.data);
+        allow update: if isWorkspaceMember(workspaceId) && isValidDocument(request.resource.data);
+        allow delete: if isWorkspaceMember(workspaceId);
+      }
+
+      match /decisions/{decisionId} {
+        allow read: if isWorkspaceMember(workspaceId);
+        allow create: if isWorkspaceMember(workspaceId) && isValidDecision(request.resource.data);
+        allow update: if isWorkspaceMember(workspaceId) && isValidDecision(request.resource.data);
+        allow delete: if isWorkspaceMember(workspaceId);
+      }
+
+      match /risks/{riskId} {
+        allow read: if isWorkspaceMember(workspaceId);
+        allow create: if isWorkspaceMember(workspaceId) && isValidRisk(request.resource.data);
+        allow update: if isWorkspaceMember(workspaceId) && isValidRisk(request.resource.data);
+        allow delete: if isWorkspaceMember(workspaceId);
+      }
+    }
+
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated() && userId == request.auth.uid;
+    }
+  }
+}

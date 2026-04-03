@@ -1,0 +1,119 @@
+{
+  "entities": {
+    "Workspace": {
+      "title": "Workspace",
+      "description": "A collaborative workspace for teams",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "Name of the workspace" },
+        "ownerId": { "type": "string", "description": "UID of the owner" },
+        "members": { "type": "array", "items": { "type": "string" }, "description": "List of member UIDs" },
+        "createdAt": { "type": "number", "description": "Creation timestamp" }
+      },
+      "required": ["name", "ownerId", "members", "createdAt"]
+    },
+    "Message": {
+      "title": "Message",
+      "description": "A message in the workspace chat",
+      "type": "object",
+      "properties": {
+        "text": { "type": "string", "description": "Content of the message" },
+        "userId": { "type": "string", "description": "UID of the sender" },
+        "userName": { "type": "string", "description": "Name of the sender" },
+        "userPhoto": { "type": "string", "description": "Photo URL of the sender" },
+        "timestamp": { "type": "number", "description": "Timestamp of the message" }
+      },
+      "required": ["text", "userId", "userName", "timestamp"]
+    },
+    "Task": {
+      "title": "Task",
+      "description": "A task in the workspace",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "Title of the task" },
+        "description": { "type": "string", "description": "Description of the task" },
+        "status": { "type": "string", "enum": ["backlog", "todo", "in-progress", "review", "done"], "description": "Current status" },
+        "priority": { "type": "string", "enum": ["low", "medium", "high", "urgent"], "description": "Priority level" },
+        "assigneeId": { "type": "string", "description": "UID of the assignee" },
+        "dueDate": { "type": "string", "description": "Due date" },
+        "createdAt": { "type": "number", "description": "Creation timestamp" }
+      },
+      "required": ["title", "status", "priority", "createdAt"]
+    },
+    "Document": {
+      "title": "Document",
+      "description": "A document in the workspace",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "Title of the document" },
+        "content": { "type": "string", "description": "Content of the document" },
+        "lastEditedBy": { "type": "string", "description": "UID of the last editor" },
+        "updatedAt": { "type": "number", "description": "Last update timestamp" }
+      },
+      "required": ["title", "content", "lastEditedBy", "updatedAt"]
+    },
+    "Decision": {
+      "title": "Decision",
+      "description": "A decision made in the workspace",
+      "type": "object",
+      "properties": {
+        "text": { "type": "string", "description": "The decision text" },
+        "timestamp": { "type": "number", "description": "Timestamp of the decision" }
+      },
+      "required": ["text", "timestamp"]
+    },
+    "Risk": {
+      "title": "Risk",
+      "description": "A risk identified in the workspace",
+      "type": "object",
+      "properties": {
+        "text": { "type": "string", "description": "The risk text" },
+        "timestamp": { "type": "number", "description": "Timestamp of the risk" }
+      },
+      "required": ["text", "timestamp"]
+    },
+    "Member": {
+      "title": "Member",
+      "description": "A member of the workspace",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "UID of the user" },
+        "email": { "type": "string", "description": "Email of the user" },
+        "displayName": { "type": "string", "description": "Display name of the user" },
+        "photoURL": { "type": "string", "description": "Photo URL of the user" },
+        "role": { "type": "string", "enum": ["admin", "member"], "description": "Role in the workspace" }
+      },
+      "required": ["uid", "email", "displayName", "role"]
+    }
+  },
+  "firestore": {
+    "workspaces/{workspaceId}": {
+      "schema": "Workspace",
+      "description": "Workspace metadata"
+    },
+    "workspaces/{workspaceId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Workspace chat messages"
+    },
+    "workspaces/{workspaceId}/tasks/{taskId}": {
+      "schema": "Task",
+      "description": "Workspace tasks"
+    },
+    "workspaces/{workspaceId}/documents/{docId}": {
+      "schema": "Document",
+      "description": "Workspace documents"
+    },
+    "workspaces/{workspaceId}/decisions/{decisionId}": {
+      "schema": "Decision",
+      "description": "Workspace decisions"
+    },
+    "workspaces/{workspaceId}/risks/{riskId}": {
+      "schema": "Risk",
+      "description": "Workspace risks"
+    },
+    "workspaces/{workspaceId}/members/{userId}": {
+      "schema": "Member",
+      "description": "Workspace members"
+    }
+  }
+}
