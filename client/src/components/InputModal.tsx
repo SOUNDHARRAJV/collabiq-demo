@@ -4,7 +4,7 @@ import { Modal } from './Modal';
 interface InputModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (value: string) => void;
+  onSubmit: (value: string) => void | Promise<void>;
   title: string;
   description?: string;
   placeholder?: string;
@@ -15,10 +15,20 @@ interface InputModalProps {
 export const InputModal = ({ isOpen, onClose, onSubmit, title, description, placeholder, initialValue = '', icon }: InputModalProps) => {
   const [value, setValue] = useState(initialValue);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onSubmit(value);
-    setValue('');
+    console.log('[Trace][UI][InputModal] submit', { title, valueLength: value.length, isOpen });
+    try {
+      await onSubmit(value);
+      setValue('');
+      onClose();
+    } catch (error) {
+      console.error('[Trace][UI][InputModal] submit error', { title, error });
+    }
+  };
+
+  const handleCancel = () => {
+    console.log('[Trace][UI][InputModal] cancel click', { title, isOpen });
     onClose();
   };
 
@@ -39,7 +49,7 @@ export const InputModal = ({ isOpen, onClose, onSubmit, title, description, plac
         <div className="flex gap-4 pt-4">
           <button 
             type="button"
-            onClick={onClose}
+            onClick={handleCancel}
             className="flex-1 py-4 bg-white/5 hover:bg-white/10 rounded-2xl text-xs font-bold uppercase tracking-widest transition-all btn-press text-white/60 border border-white/5"
           >
             Cancel

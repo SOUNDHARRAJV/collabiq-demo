@@ -35,18 +35,21 @@ export function useSocketEmit() {
       return new Promise((resolve) => {
         const socket = getSocket();
         if (!socket) {
+          console.warn('[Trace][SocketEmit] blocked: socket unavailable', { event });
           resolve(options?.fallback ?? null);
           return;
         }
 
         const timeout = options?.timeout ?? 5000;
+        console.log('[Trace][SocketEmit] emit start', { event, timeout, connected: socket.connected, socketId: socket.id });
         const timer = setTimeout(() => {
-          console.warn(`Event [${event}] timed out after ${timeout}ms`);
+          console.warn('[Trace][SocketEmit] emit timeout', { event, timeout });
           resolve(options?.fallback ?? null);
         }, timeout);
 
         socket.emit(event, data, (ack: T) => {
           clearTimeout(timer);
+          console.log('[Trace][SocketEmit] ack received', { event });
           resolve(ack);
         });
       });

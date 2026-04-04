@@ -19,7 +19,9 @@ const getDefaultAnalysis = () => ({
 
 export async function analyzeDiscussion(messages: any[]) {
   try {
+    console.log('[Trace][API][Gemini] analyzeDiscussion called', { messageCount: messages.length });
     if (messages.length === 0) {
+      console.warn('[Breakpoint][Flow][Gemini] analyzeDiscussion called with empty messages');
       return getDefaultAnalysis();
     }
 
@@ -66,6 +68,11 @@ Return ONLY valid JSON with tasks (title, description, priority), decisions (str
     });
 
     const parsed = JSON.parse(response.text);
+    console.log('[Trace][API][Gemini] analyzeDiscussion parsed', {
+      tasks: Array.isArray(parsed.tasks) ? parsed.tasks.length : 0,
+      decisions: Array.isArray(parsed.decisions) ? parsed.decisions.length : 0,
+      risks: Array.isArray(parsed.risks) ? parsed.risks.length : 0,
+    });
     
     // Validate response structure
     return {
@@ -74,6 +81,7 @@ Return ONLY valid JSON with tasks (title, description, priority), decisions (str
       risks: Array.isArray(parsed.risks) ? parsed.risks : []
     };
   } catch (error) {
+    console.error('[Trace][API][Gemini] analyzeDiscussion error', error);
     console.error('Failed to analyze discussion:', error);
     // Return empty results on error - UI will show graceful fallback
     return getDefaultAnalysis();
@@ -82,6 +90,12 @@ Return ONLY valid JSON with tasks (title, description, priority), decisions (str
 
 export async function generateWorkspaceReport(workspaceName: string, tasks: any[], decisions: any[], risks: any[]) {
   try {
+    console.log('[Trace][API][Gemini] generateWorkspaceReport called', {
+      workspaceName,
+      tasks: tasks.length,
+      decisions: decisions.length,
+      risks: risks.length,
+    });
     const ai = getAiClient();
     const response = await ai.models.generateContent({
       model: "gemini-2.0-flash",
@@ -94,8 +108,10 @@ Risks: ${JSON.stringify(risks)}
 The report should be in Markdown format, professional, and concise.`,
     });
 
+    console.log('[Trace][API][Gemini] generateWorkspaceReport success', { responseLength: response.text.length });
     return response.text;
   } catch (error) {
+    console.error('[Trace][API][Gemini] generateWorkspaceReport error', error);
     console.error('Failed to generate report:', error);
     return `# Status Report: ${workspaceName}\n\nUnable to generate AI report. Please try again later.`;
   }
@@ -103,7 +119,9 @@ The report should be in Markdown format, professional, and concise.`,
 
 export async function getProjectInsights(tasks: any[]) {
   try {
+    console.log('[Trace][API][Gemini] getProjectInsights called', { taskCount: tasks.length });
     if (tasks.length === 0) {
+      console.warn('[Breakpoint][Flow][Gemini] getProjectInsights called with empty tasks');
       return [];
     }
 
@@ -122,8 +140,10 @@ Focus on workload, bottlenecks, and velocity. Return as JSON array of strings.`,
     });
 
     const parsed = JSON.parse(response.text);
+    console.log('[Trace][API][Gemini] getProjectInsights parsed', { insightCount: Array.isArray(parsed) ? parsed.length : 0 });
     return Array.isArray(parsed) ? parsed : [];
   } catch (error) {
+    console.error('[Trace][API][Gemini] getProjectInsights error', error);
     console.error('Failed to get insights:', error);
     return [];
   }

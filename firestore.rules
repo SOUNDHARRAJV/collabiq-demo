@@ -139,7 +139,9 @@ service cloud.firestore {
     // ===============================================================
 
     match /workspaces/{workspaceId} {
-      allow read: if isWorkspaceMember(workspaceId);
+      // Allow any authenticated user to read workspaces (needed for join flow)
+      // Members and admins maintain write permissions
+      allow read: if isAuthenticated();
       allow create: if isAuthenticated() && isValidWorkspace(request.resource.data);
       allow update: if isWorkspaceAdmin(workspaceId) && isValidWorkspace(request.resource.data);
       allow delete: if isWorkspaceAdmin(workspaceId);

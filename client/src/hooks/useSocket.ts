@@ -15,13 +15,26 @@ export function useSocket() {
   const { activeWorkspace, addOrUpdateMember, members } = useWorkspaceStore();
   const { user } = useAuthStore();
   const lastPresenceRef = useRef<number>(0);
+  const membersRef = useRef(members);
+  const addOrUpdateMemberRef = useRef(addOrUpdateMember);
+  const lastActiveUsersRef = useRef<string[]>([]);
 
   useEffect(() => {
-    if (!activeWorkspace || !user) return;
+    membersRef.current = members;
+    addOrUpdateMemberRef.current = addOrUpdateMember;
+  }, [members, addOrUpdateMember]);
+
+  useEffect(() => {
+    if (!activeWorkspace || !user) {
+      console.log('[Trace][Socket] skip connect', { hasWorkspace: !!activeWorkspace, hasUser: !!user });
+      return;
+    }
+
+    console.log('[Trace][Socket] effect start', { workspaceId: activeWorkspace.id, userId: user.uid });
 
     // Handle workspace change: leave old room before joining new one
     if (socketRef.current && previousWorkspaceRef.current && previousWorkspaceRef.current !== activeWorkspace.id) {
-      console.log(`Leaving workspace ${previousWorkspaceRef.current}, joining ${activeWorkspace.id}`);
+      console.log('[Trace][Socket] leave-workspace emit', { from: previousWorkspaceRef.current, to: activeWorkspace.id, userId: user.uid });
       socketRef.current.emit('leave-workspace', { workspaceId: previousWorkspaceRef.current, userId: user.uid });
     }
 
@@ -36,35 +49,37 @@ export function useSocket() {
       });
 
       socket.on('connect', () => {
-        console.log('Socket connected:', socket.id);
+        console.log('[Trace][Socket] connected', { socketId: socket.id });
         setGlobalSocket(socket);
 
         // Join workspace with acknowledgement
+        console.log('[Trace][Socket] join-workspace emit', { workspaceId: activeWorkspace.id, userId: user.uid, reason: 'connect' });
         socket.emit(
           'join-workspace',
           { workspaceId: activeWorkspace.id, userId: user.uid },
           (ack: any) => {
             if (ack?.success) {
-              console.log('Successfully joined workspace', ack.activeUsers);
-              updateMemberOnlineStatus(ack.activeUsers);
+              console.log('[Trace][Socket] join-workspace ack success', { workspaceId: activeWorkspace.id, activeUsers: ack.activeUsers?.length ?? 0 });
+              lastActiveUsersRef.current = Array.isArray(ack.activeUsers) ? ack.activeUsers : [];
+              updateMemberOnlineStatus(lastActiveUsersRef.current, 'join-ack');
             } else {
-              console.error('Failed to join workspace:', ack?.error);
+              console.error('[Trace][Socket] join-workspace ack error', ack?.error);
             }
           }
         );
       });
 
       socket.on('connect_error', (error) => {
-        console.warn('Socket connection error:', error);
+        console.warn('[Trace][Socket] connect_error', error);
       });
 
       socket.on('disconnect', (reason) => {
-        console.log('Socket disconnected:', reason);
+        console.log('[Trace][Socket] disconnected', { reason });
         setGlobalSocket(null);
         // Mark all members as offline on disconnect
-        members.forEach((m) => {
+        membersRef.current.forEach((m) => {
           if (m.isOnline) {
-            addOrUpdateMember({ ...m, isOnline: false });
+            addOrUpdateMemberRef.current({ ...m, isOnline: false });
           }
         });
       });
@@ -77,27 +92,31 @@ export function useSocket() {
         if (now - lastPresenceRef.current < 50) return;
         lastPresenceRef.current = now;
 
-        updateMemberOnlineStatus(data.activeUsers);
+        console.log('[Trace][Socket] presence-update received', { activeUsers: data.activeUsers.length, timestamp: data.timestamp });
+        lastActiveUsersRef.current = Array.isArray(data.activeUsers) ? data.activeUsers : [];
+        updateMemberOnlineStatus(lastActiveUsersRef.current, 'presence-update');
       });
 
       // Listen for cursor updates
       socket.on('cursor-update', (data) => {
         // Could be used for real-time cursors if UI component needs it
-        console.debug('Cursor update from', data.userId);
+        console.debug('[Trace][Socket] cursor-update', { userId: data.userId });
       });
 
       socketRef.current = socket;
     } else if (previousWorkspaceRef.current !== activeWorkspace.id) {
       // If socket exists but workspace changed, join the new workspace
+      console.log('[Trace][Socket] join-workspace emit', { workspaceId: activeWorkspace.id, userId: user.uid, reason: 'workspace-switch' });
       socketRef.current.emit(
         'join-workspace',
         { workspaceId: activeWorkspace.id, userId: user.uid },
         (ack: any) => {
           if (ack?.success) {
-            console.log('Successfully joined new workspace', ack.activeUsers);
-            updateMemberOnlineStatus(ack.activeUsers);
+            console.log('[Trace][Socket] join-workspace (switch) ack success', { workspaceId: activeWorkspace.id, activeUsers: ack.activeUsers?.length ?? 0 });
+            lastActiveUsersRef.current = Array.isArray(ack.activeUsers) ? ack.activeUsers : [];
+            updateMemberOnlineStatus(lastActiveUsersRef.current, 'join-ack-switch');
           } else {
-            console.error('Failed to join new workspace:', ack?.error);
+            console.error('[Trace][Socket] join-workspace (switch) ack error', ack?.error);
           }
         }
       );
@@ -111,16 +130,29 @@ export function useSocket() {
       // Don't disconnect socket on unmount - keep connection alive for multi-tab
       // Socket will handle workspace transitions via join-workspace events
     };
-  }, [activeWorkspace?.id, user?.uid, addOrUpdateMember, members]);
+  }, [activeWorkspace?.id, user?.uid]);
+
+  useEffect(() => {
+    if (!activeWorkspace || !user || lastActiveUsersRef.current.length === 0) return;
+    console.log('[Trace][Socket] replay presence for hydrated members', {
+      workspaceId: activeWorkspace.id,
+      members: members.length,
+      activeUsers: lastActiveUsersRef.current.length,
+    });
+    updateMemberOnlineStatus(lastActiveUsersRef.current, 'members-hydrated');
+  }, [members, activeWorkspace?.id, user?.uid]);
 
   // Update member online status based on active users list (preserve other member data)
-  const updateMemberOnlineStatus = (activeUserIds: string[]) => {
+  const updateMemberOnlineStatus = (activeUserIds: string[], source: string) => {
     const activeSet = new Set(activeUserIds);
-    members.forEach((member) => {
+    const currentMembers = membersRef.current;
+    console.log('[Trace][Socket] updateMemberOnlineStatus', { source, incomingActiveUsers: activeUserIds.length, memberCount: currentMembers.length });
+    currentMembers.forEach((member) => {
       const shouldBeOnline = activeSet.has(member.uid);
       if (member.isOnline !== shouldBeOnline) {
+        console.log('[Trace][Socket] member status change', { uid: member.uid, from: member.isOnline ?? false, to: shouldBeOnline });
         // Only update if status changed to reduce store thrashing
-        addOrUpdateMember({ ...member, isOnline: shouldBeOnline });
+        addOrUpdateMemberRef.current({ ...member, isOnline: shouldBeOnline });
       }
     });
   };
@@ -138,16 +170,21 @@ export function emitWithAck<T = any>(
 ): Promise<T> {
   return new Promise((resolve, reject) => {
     if (!socket) {
+      console.error('[Trace][Socket] emitWithAck blocked: no socket', { event });
       reject(new Error('Socket not connected'));
       return;
     }
 
+    console.log('[Trace][Socket] emitWithAck start', { event, timeout });
+
     const timer = setTimeout(() => {
+      console.error('[Trace][Socket] emitWithAck timeout', { event, timeout });
       reject(new Error(`[${event}] timeout after ${timeout}ms`));
     }, timeout);
 
     socket.emit(event, data, (ack: T) => {
       clearTimeout(timer);
+      console.log('[Trace][Socket] emitWithAck ack', { event });
       resolve(ack);
     });
   });

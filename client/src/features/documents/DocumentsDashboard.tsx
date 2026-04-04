@@ -24,19 +24,26 @@ export function DocumentsDashboard() {
     if (activeDoc) {
       setContent(activeDoc.content);
     }
-  }, [activeDoc?.id]);
+  }, [activeDoc]);
 
   const handleSave = async () => {
-    if (!activeDoc || !activeWorkspace) return;
+    console.log('[Trace][UI][DocumentsDashboard] save click', { docId: activeDoc?.id, workspaceId: activeWorkspace?.id, contentLength: content.length });
+    if (!activeDoc || !activeWorkspace) {
+      console.warn('[Breakpoint][Flow][DocumentsDashboard] save blocked by guard', { hasActiveDoc: !!activeDoc, hasWorkspace: !!activeWorkspace });
+      return;
+    }
     setIsSaving(true);
     const path = `workspaces/${activeWorkspace.id}/documents/${activeDoc.id}`;
     try {
+      console.log('[Trace][API][Firestore] saveDocument update start', { path });
       await updateDoc(doc(db, path), {
         content,
         updatedAt: Date.now()
       });
+      console.log('[Trace][API][Firestore] saveDocument update success', { path });
       setIsSaving(false);
     } catch (error) {
+      console.error('[Trace][API][Firestore] saveDocument update error', error);
       handleFirestoreError(error, OperationType.UPDATE, path);
       console.error('Error saving document:', error);
       setIsSaving(false);
@@ -44,12 +51,19 @@ export function DocumentsDashboard() {
   };
 
   const handleDeleteDoc = async (docId: string) => {
-    if (!activeWorkspace || userRole !== 'admin') return;
+    console.log('[Trace][UI][DocumentsDashboard] deleteDoc click', { docId, userRole, workspaceId: activeWorkspace?.id });
+    if (!activeWorkspace || userRole !== 'admin') {
+      console.warn('[Breakpoint][Flow][DocumentsDashboard] deleteDoc blocked by guard', { hasWorkspace: !!activeWorkspace, userRole });
+      return;
+    }
     const path = `workspaces/${activeWorkspace.id}/documents/${docId}`;
     try {
+      console.log('[Trace][API][Firestore] deleteDocument start', { path });
       await deleteDoc(doc(db, path));
+      console.log('[Trace][API][Firestore] deleteDocument success', { path });
       if (activeDoc?.id === docId) setActiveDoc(null);
     } catch (error) {
+      console.error('[Trace][API][Firestore] deleteDocument error', error);
       handleFirestoreError(error, OperationType.DELETE, path);
       console.error('Error deleting document:', error);
     }
@@ -110,15 +124,25 @@ export function DocumentsDashboard() {
                 <p className="text-[10px] text-white/30 font-medium">{formatDate(doc.updatedAt)}</p>
               </div>
               {userRole === 'admin' && (
-                <button 
+                <div
+                  role="button"
+                  tabIndex={0}
                   onClick={(e) => {
                     e.stopPropagation();
                     handleDeleteDoc(doc.id);
                   }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleDeleteDoc(doc.id);
+                    }
+                  }}
                   className="p-1.5 opacity-0 group-hover:opacity-100 text-white/20 hover:text-red-400 transition-all"
+                  aria-label="Delete document"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
-                </button>
+                </div>
               )}
             </button>
           ))}

@@ -22,15 +22,22 @@ export function SettingsDashboard() {
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !profileName) return;
+    console.log('[Trace][UI][SettingsDashboard] update profile submit', { hasUser: !!user, profileNameLength: profileName.length });
+    if (!user || !profileName) {
+      console.warn('[Breakpoint][Flow][SettingsDashboard] update profile blocked by guard', { hasUser: !!user, hasProfileName: !!profileName });
+      return;
+    }
     setIsSaving(true);
     const path = `users/${user.uid}`;
     try {
+      console.log('[Trace][API][Firestore] update profile start', { path });
       await updateDoc(doc(db, 'users', user.uid), {
         displayName: profileName
       });
+      console.log('[Trace][API][Firestore] update profile success', { path });
       setIsSaving(false);
     } catch (error) {
+      console.error('[Trace][API][Firestore] update profile error', error);
       handleFirestoreError(error, OperationType.UPDATE, path);
       setIsSaving(false);
     }
@@ -38,21 +45,50 @@ export function SettingsDashboard() {
 
   const handleUpdateWorkspace = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activeWorkspace || !workspaceName || userRole !== 'admin') return;
+    console.log('[Trace][UI][SettingsDashboard] update workspace submit', {
+      workspaceId: activeWorkspace?.id,
+      workspaceNameLength: workspaceName.length,
+      userRole,
+    });
+    if (!activeWorkspace || !workspaceName || userRole !== 'admin') {
+      console.warn('[Breakpoint][Flow][SettingsDashboard] update workspace blocked by guard', {
+        hasWorkspace: !!activeWorkspace,
+        hasWorkspaceName: !!workspaceName,
+        userRole,
+      });
+      return;
+    }
     setIsSaving(true);
     const path = `workspaces/${activeWorkspace.id}`;
     try {
+      console.log('[Trace][API][Firestore] update workspace start', { path });
       await updateDoc(doc(db, 'workspaces', activeWorkspace.id), {
         name: workspaceName
       });
+      console.log('[Trace][API][Firestore] update workspace success', { path });
       setIsSaving(false);
     } catch (error) {
+      console.error('[Trace][API][Firestore] update workspace error', error);
       handleFirestoreError(error, OperationType.UPDATE, path);
       setIsSaving(false);
     }
   };
 
   const handleLogout = () => auth.signOut();
+
+  const handleCameraClick = () => {
+    console.warn('[Breakpoint][UI][SettingsDashboard] camera button clicked but upload handler is not implemented');
+  };
+
+  const handleLogoutClick = async () => {
+    console.log('[Trace][UI][SettingsDashboard] logout click start');
+    try {
+      await handleLogout();
+      console.log('[Trace][UI][SettingsDashboard] logout click success');
+    } catch (error) {
+      console.error('[Trace][UI][SettingsDashboard] logout click error', error);
+    }
+  };
 
   return (
     <div className="h-full flex flex-col p-6 gap-6 overflow-y-auto custom-scrollbar">
@@ -77,7 +113,7 @@ export function SettingsDashboard() {
                   className="w-20 h-20 rounded-3xl border-2 border-white/10 group-hover:scale-105 transition-transform"
                   alt="Profile"
                 />
-                <button type="button" className="absolute bottom-0 right-0 w-8 h-8 rounded-xl bg-music-red flex items-center justify-center shadow-lg shadow-music-red/30 hover:scale-110 transition-transform">
+                <button type="button" onClick={handleCameraClick} className="absolute bottom-0 right-0 w-8 h-8 rounded-xl bg-music-red flex items-center justify-center shadow-lg shadow-music-red/30 hover:scale-110 transition-transform">
                   <Camera className="w-4 h-4 text-white" />
                 </button>
               </div>
@@ -181,7 +217,7 @@ export function SettingsDashboard() {
               variant="secondary" 
               size="sm" 
               className="mt-auto"
-              onClick={handleLogout}
+              onClick={handleLogoutClick}
             >
               Sign Out
             </GlassButton>

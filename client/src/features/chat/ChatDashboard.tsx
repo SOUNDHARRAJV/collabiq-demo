@@ -29,13 +29,26 @@ export function ChatDashboard() {
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || !activeWorkspace || !user) return;
+    console.log('[Trace][UI][ChatDashboard] sendMessage submit', {
+      messageLength: newMessage.trim().length,
+      workspaceId: activeWorkspace?.id,
+      hasUser: !!user,
+    });
+    if (!newMessage.trim() || !activeWorkspace || !user) {
+      console.warn('[Breakpoint][Flow][ChatDashboard] sendMessage blocked by guard', {
+        hasMessage: !!newMessage.trim(),
+        hasWorkspace: !!activeWorkspace,
+        hasUser: !!user,
+      });
+      return;
+    }
 
     const messageText = newMessage.trim();
     setNewMessage('');
     const path = `workspaces/${activeWorkspace.id}/messages`;
 
     try {
+      console.log('[Trace][API][Firestore] sendMessage addDoc start', { path });
       await addDoc(collection(db, path), {
         text: messageText,
         userId: user.uid,
@@ -43,17 +56,29 @@ export function ChatDashboard() {
         userPhoto: user.photoURL,
         timestamp: Date.now(),
       });
+      console.log('[Trace][API][Firestore] sendMessage addDoc success', { path, messageLength: messageText.length });
     } catch (error) {
+      console.error('[Trace][API][Firestore] sendMessage addDoc error', error);
       handleFirestoreError(error, OperationType.CREATE, path);
       console.error('Error sending message:', error);
     }
   };
 
   const handleAnalyze = async () => {
-    if (messages.length === 0 || !activeWorkspace) return;
+    console.log('[Trace][UI][ChatDashboard] analyze click', { messageCount: messages.length, workspaceId: activeWorkspace?.id });
+    if (messages.length === 0 || !activeWorkspace) {
+      console.warn('[Breakpoint][Flow][ChatDashboard] analyze blocked by guard', { hasMessages: messages.length > 0, hasWorkspace: !!activeWorkspace });
+      return;
+    }
     setIsAnalyzing(true);
     try {
+      console.log('[Trace][API][Gemini] analyzeDiscussion start', { sampleSize: messages.slice(-20).length });
       const analysis = await analyzeDiscussion(messages.slice(-20));
+      console.log('[Trace][API][Gemini] analyzeDiscussion success', {
+        tasks: analysis.tasks.length,
+        decisions: analysis.decisions.length,
+        risks: analysis.risks.length,
+      });
       
       // Check if analysis included any results
       const totalResults = analysis.tasks.length + analysis.decisions.length + analysis.risks.length;
@@ -62,34 +87,43 @@ export function ChatDashboard() {
       for (const task of analysis.tasks) {
         const path = `workspaces/${activeWorkspace.id}/tasks`;
         try {
+          console.log('[Trace][API][Firestore] analyze->task addDoc start', { path, title: task.title });
           await addDoc(collection(db, path), {
             ...task,
             status: 'backlog',
             createdAt: Date.now()
           });
+          console.log('[Trace][API][Firestore] analyze->task addDoc success', { path, title: task.title });
         } catch (e) {
+          console.error('[Trace][API][Firestore] analyze->task addDoc error', e);
           handleFirestoreError(e, OperationType.CREATE, path);
         }
       }
       for (const decision of analysis.decisions) {
         const path = `workspaces/${activeWorkspace.id}/decisions`;
         try {
+          console.log('[Trace][API][Firestore] analyze->decision addDoc start', { path });
           await addDoc(collection(db, path), {
             text: decision,
             timestamp: Date.now()
           });
+          console.log('[Trace][API][Firestore] analyze->decision addDoc success', { path });
         } catch (e) {
+          console.error('[Trace][API][Firestore] analyze->decision addDoc error', e);
           handleFirestoreError(e, OperationType.CREATE, path);
         }
       }
       for (const risk of analysis.risks) {
         const path = `workspaces/${activeWorkspace.id}/risks`;
         try {
+          console.log('[Trace][API][Firestore] analyze->risk addDoc start', { path });
           await addDoc(collection(db, path), {
             text: risk,
             timestamp: Date.now()
           });
+          console.log('[Trace][API][Firestore] analyze->risk addDoc success', { path });
         } catch (e) {
+          console.error('[Trace][API][Firestore] analyze->risk addDoc error', e);
           handleFirestoreError(e, OperationType.CREATE, path);
         }
       }
@@ -101,9 +135,11 @@ export function ChatDashboard() {
         showToast('Analysis complete but no insights extracted. Try discussing more details.', 'info');
       }
     } catch (error) {
+      console.error('[Trace][API][Gemini] analyzeDiscussion error', error);
       console.error('Analysis failed:', error);
       showToast('AI analysis failed. Please try again later.', 'error');
     } finally {
+      console.log('[Trace][UI][ChatDashboard] analyze flow complete');
       setIsAnalyzing(false);
     }
   };

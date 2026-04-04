@@ -145,21 +145,38 @@ export function KanbanDashboard() {
   const { setModal, setShowTaskModal } = useUIStore();
   const [searchQuery, setSearchQuery] = useState('');
 
+  const handleFilterClick = () => {
+    console.warn('[Breakpoint][UI][KanbanDashboard] filter button clicked but filter panel/action is not implemented');
+  };
+
   const handleMoveTask = async (taskId: string, newStatus: Task['status']) => {
-    if (!activeWorkspace) return;
+    console.log('[Trace][UI][KanbanDashboard] moveTask action', { taskId, newStatus, workspaceId: activeWorkspace?.id });
+    if (!activeWorkspace) {
+      console.warn('[Breakpoint][Flow][KanbanDashboard] moveTask blocked by guard (no workspace)');
+      return;
+    }
     const path = `workspaces/${activeWorkspace.id}/tasks/${taskId}`;
     try {
+      console.log('[Trace][API][Firestore] moveTask update start', { path, newStatus });
       await updateDoc(doc(db, path), {
         status: newStatus
       });
+      console.log('[Trace][API][Firestore] moveTask update success', { path, newStatus });
     } catch (error) {
+      console.error('[Trace][API][Firestore] moveTask update error', error);
       handleFirestoreError(error, OperationType.UPDATE, path);
       console.error('Error moving task:', error);
     }
   };
 
   const handleDeleteTask = (taskId: string) => {
+    console.log('[Trace][UI][KanbanDashboard] deleteTask click', { taskId });
     setModal({ type: 'deleteTask', data: { taskId } });
+  };
+
+  const handleNewTaskClick = () => {
+    console.log('[Trace][UI][KanbanDashboard] newTask click');
+    setShowTaskModal(true);
   };
 
   const filteredTasks = tasks.filter(t => 
@@ -190,7 +207,7 @@ export function KanbanDashboard() {
               className="w-full glass-ios-light bg-white/5 border-white/5 rounded-xl pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-music-red/30 transition-all"
             />
           </div>
-          <GlassButton variant="secondary" size="sm" className="flex items-center gap-2">
+          <GlassButton variant="secondary" size="sm" className="flex items-center gap-2" onClick={handleFilterClick}>
             <Filter className="w-4 h-4" />
             <span>Filter</span>
           </GlassButton>
@@ -198,7 +215,7 @@ export function KanbanDashboard() {
         
         {userRole === 'admin' && (
           <GlassButton 
-            onClick={() => setShowTaskModal(true)}
+            onClick={handleNewTaskClick}
             className="flex items-center gap-2"
           >
             <Plus className="w-4 h-4" />
@@ -218,7 +235,7 @@ export function KanbanDashboard() {
             onMoveTask={handleMoveTask}
             onDeleteTask={handleDeleteTask}
             isAdmin={userRole === 'admin'}
-            onAddTask={() => setShowTaskModal(true)}
+            onAddTask={handleNewTaskClick}
           />
         ))}
       </div>

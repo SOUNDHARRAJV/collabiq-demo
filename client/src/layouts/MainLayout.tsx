@@ -1,5 +1,6 @@
-import { ReactNode } from 'react';
+import { ReactNode, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useUIStore } from '../store/useUIStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { useWorkspaceStore } from '../store/useWorkspaceStore';
@@ -33,6 +34,27 @@ export function MainLayout({ children }: MainLayoutProps) {
   const { user } = useAuthStore();
   const { activeWorkspace, members, decisions, risks, userRole } = useWorkspaceStore();
   const { activeView, setActiveView, setModal } = useUIStore();
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const routeToView: Record<string, string> = {
+    '/chat': 'chat',
+    '/kanban': 'kanban',
+    '/documents': 'documents',
+    '/analytics': 'analytics',
+    '/ai-insights': 'ai-insights',
+    '/workspace': 'workspace',
+    '/settings': 'settings',
+  };
+
+  useEffect(() => {
+    const nextView = location.pathname.startsWith('/workspace/')
+      ? 'workspace'
+      : routeToView[location.pathname];
+    if (nextView && nextView !== activeView) {
+      setActiveView(nextView as any);
+    }
+  }, [location.pathname, activeView, setActiveView]);
 
   const navItems = [
     { id: 'chat', icon: MessageSquare, label: 'Discussion' },
@@ -45,6 +67,30 @@ export function MainLayout({ children }: MainLayoutProps) {
   ];
 
   const handleLogout = () => auth.signOut();
+  const handleNavClick = (id: string) => {
+    console.log('[Trace][UI][MainLayout] nav click', { id });
+    setActiveView(id as any);
+    navigate(`/${id}`);
+  };
+
+  const handleInviteClick = () => {
+    console.log('[Trace][UI][MainLayout] invite click', { modalType: 'inviteMember' });
+    setModal({ type: 'inviteMember' });
+  };
+
+  const handleBellClick = () => {
+    console.warn('[Breakpoint][UI][MainLayout] bell button clicked but no notification handler is implemented');
+  };
+
+  const handleLogoutClick = async () => {
+    console.log('[Trace][UI][MainLayout] logout click start');
+    try {
+      await handleLogout();
+      console.log('[Trace][UI][MainLayout] logout click success');
+    } catch (error) {
+      console.error('[Trace][UI][MainLayout] logout click error', error);
+    }
+  };
 
   return (
     <div className="flex h-screen w-screen overflow-hidden music-bg text-white font-sans">
@@ -61,7 +107,7 @@ export function MainLayout({ children }: MainLayoutProps) {
           {navItems.map((item) => (
             <button
               key={item.id}
-              onClick={() => setActiveView(item.id as any)}
+              onClick={() => handleNavClick(item.id)}
               className={cn(
                 'flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 group btn-press',
                 activeView === item.id 
@@ -94,7 +140,7 @@ export function MainLayout({ children }: MainLayoutProps) {
             <p className="text-sm font-semibold truncate">{user?.displayName}</p>
             <p className="text-[10px] text-white/40 uppercase tracking-widest font-bold">{userRole}</p>
           </div>
-          <button onClick={handleLogout} className="p-2 text-white/40 hover:text-red-400 transition-colors">
+          <button onClick={handleLogoutClick} className="p-2 text-white/40 hover:text-red-400 transition-colors">
             <LogOut className="w-5 h-5" />
           </button>
         </GlassCard>
@@ -126,13 +172,13 @@ export function MainLayout({ children }: MainLayoutProps) {
                   className="glass-ios-light bg-white/5 border-white/5 rounded-full pl-10 pr-4 py-2 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-music-red/30 transition-all"
                 />
               </div>
-              <GlassButton variant="secondary" size="sm" className="relative">
+              <GlassButton variant="secondary" size="sm" className="relative" onClick={handleBellClick}>
                 <Bell className="w-4 h-4" />
                 <span className="absolute top-0 right-0 w-2 h-2 bg-music-red rounded-full border-2 border-[#0B0B0F]" />
               </GlassButton>
               {userRole === 'admin' && (
                 <GlassButton 
-                  onClick={() => setModal({ type: 'inviteMember' })}
+                  onClick={handleInviteClick}
                   className="flex items-center gap-2"
                 >
                   <Plus className="w-4 h-4" />

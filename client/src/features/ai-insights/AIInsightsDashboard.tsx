@@ -15,22 +15,39 @@ export function AIInsightsDashboard() {
   const { showToast } = useToast();
   const [isGenerating, setIsGenerating] = useState(false);
 
+  const handleInsightChevronClick = (payload: { section: string; id?: string; index: number }) => {
+    console.warn('[Breakpoint][UI][AIInsightsDashboard] chevron button clicked but detail action is not implemented', payload);
+  };
+
   const handleGenerateReport = async () => {
-    if (!activeWorkspace) return;
+    console.log('[Trace][UI][AIInsightsDashboard] generate report click', {
+      workspaceId: activeWorkspace?.id,
+      tasks: tasks.length,
+      decisions: decisions.length,
+      risks: risks.length,
+    });
+    if (!activeWorkspace) {
+      console.warn('[Breakpoint][Flow][AIInsightsDashboard] generate report blocked by guard (no workspace)');
+      return;
+    }
     setIsGenerating(true);
     try {
+      console.log('[Trace][API][Gemini] generateWorkspaceReport start', { workspaceName: activeWorkspace.name });
       const report = await generateWorkspaceReport(
         activeWorkspace.name,
         tasks,
         decisions.map(d => d.text),
         risks.map(r => r.text)
       );
+      console.log('[Trace][API][Gemini] generateWorkspaceReport success', { reportLength: report.length });
       setModal({ type: 'viewReport', data: { report } });
       showToast('Status report generated successfully');
     } catch (error) {
+      console.error('[Trace][API][Gemini] generateWorkspaceReport error', error);
       console.error('Failed to generate report:', error);
       showToast('Failed to generate report. Please try again.', 'error');
     } finally {
+      console.log('[Trace][UI][AIInsightsDashboard] generate report flow complete');
       setIsGenerating(false);
     }
   };
@@ -129,7 +146,10 @@ export function AIInsightsDashboard() {
                           <span>{formatDate(item.timestamp || item.createdAt)}</span>
                         </div>
                       </div>
-                      <button className="p-1.5 opacity-0 group-hover:opacity-100 text-white/20 hover:text-white transition-all">
+                      <button
+                        className="p-1.5 opacity-0 group-hover:opacity-100 text-white/20 hover:text-white transition-all"
+                        onClick={() => handleInsightChevronClick({ section: section.title, id: item.id, index: itemIdx })}
+                      >
                         <ChevronRight className="w-4 h-4" />
                       </button>
                     </div>

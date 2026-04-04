@@ -18,6 +18,7 @@ export function setupSocketServer(io: Server) {
     
     presenceTimestamps.set(workspaceId, now);
     const uniqueUsers = Array.from(workspaceUsers.get(workspaceId)?.keys() || []);
+    console.log('[Trace][SocketServer] emit presence-update', { workspaceId, activeUsers: uniqueUsers.length, timestamp: now });
     io.to(workspaceId).emit('presence-update', {
       activeUsers: uniqueUsers,
       timestamp: now
@@ -25,7 +26,7 @@ export function setupSocketServer(io: Server) {
   };
 
   io.on('connection', (socket: Socket) => {
-    console.log('A user connected:', socket.id);
+    console.log('[Trace][SocketServer] connect', { socketId: socket.id });
 
     // Rejoin previous workspace on reconnect
     socket.on('reconnect', () => {
@@ -40,6 +41,7 @@ export function setupSocketServer(io: Server) {
 
     socket.on('join-workspace', ({ workspaceId, userId }, callback: (data: JoinAckData) => void) => {
       try {
+        console.log('[Trace][SocketServer] receive join-workspace', { socketId: socket.id, workspaceId, userId });
         // Validate inputs
         if (!workspaceId || !userId) {
           const err = { success: false, activeUsers: [], error: 'Missing workspaceId or userId' };
@@ -63,6 +65,7 @@ export function setupSocketServer(io: Server) {
         const uniqueUsers = Array.from(workspaceUsers.get(workspaceId)?.keys() || []);
         
         // Acknowledge join with current active users
+        console.log('[Trace][SocketServer] emit join-workspace ack', { socketId: socket.id, workspaceId, activeUsers: uniqueUsers.length, success: true });
         callback?.({ success: true, activeUsers: uniqueUsers });
         
         // Broadcast presence update
@@ -77,6 +80,7 @@ export function setupSocketServer(io: Server) {
 
     socket.on('cursor-move', (data: any, callback?: (ack: boolean) => void) => {
       try {
+        console.log('[Trace][SocketServer] receive cursor-move', { socketId: socket.id, workspaceId: data?.workspaceId, userId: data?.userId });
         if (!data?.workspaceId) {
           callback?.(false);
           return;
@@ -87,16 +91,20 @@ export function setupSocketServer(io: Server) {
           ...data,
           timestamp: Date.now()
         });
+        console.log('[Trace][SocketServer] emit cursor-update', { workspaceId: data.workspaceId, fromSocketId: socket.id });
         
+        console.log('[Trace][SocketServer] emit cursor-move ack', { socketId: socket.id, ok: true });
         callback?.(true);
       } catch (error) {
         console.error('Error in cursor-move:', error);
+        console.log('[Trace][SocketServer] emit cursor-move ack', { socketId: socket.id, ok: false });
         callback?.(false);
       }
     });
 
     socket.on('leave-workspace', ({ workspaceId, userId }) => {
       try {
+        console.log('[Trace][SocketServer] receive leave-workspace', { socketId: socket.id, workspaceId, userId });
         if (!workspaceId || !userId) return;
 
         socket.leave(workspaceId);
@@ -130,7 +138,7 @@ export function setupSocketServer(io: Server) {
         console.log(`User ${userId} left workspace ${workspaceId}`);
       }
 
-      console.log('User disconnected:', socket.id);
+      console.log('[Trace][SocketServer] disconnect', { socketId: socket.id });
     });
 
     // Handle connection errors

@@ -1,9 +1,9 @@
-import { useEffect } from 'react';
+import { ReactElement, useEffect, useState } from 'react';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './firebase';
 import { useAuthStore } from './store/useAuthStore';
 import { useWorkspaceStore } from './store/useWorkspaceStore';
-import { useUIStore } from './store/useUIStore';
 import { useRealtimeSync } from './hooks/useRealtimeSync';
 import { useSocket } from './hooks/useSocket';
 import { useToast } from './features/notifications/ToastProvider';
@@ -26,11 +26,24 @@ import { SettingsDashboard } from './features/workspace/SettingsDashboard';
 import { WorkspaceModals } from './features/workspace/WorkspaceModals';
 import { TaskModal } from './features/kanban/TaskModal';
 
+function RouteMountLogger({ name, children }: { name: string; children: ReactElement }) {
+  useEffect(() => {
+    console.log('[Trace][Router] mount', { routeComponent: name });
+    return () => {
+      console.log('[Trace][Router] unmount', { routeComponent: name });
+    };
+  }, [name]);
+
+  console.log('[Trace][Router] render', { routeComponent: name });
+  return children;
+}
+
 export default function App() {
   const { user, setUser, setLoading, loading } = useAuthStore();
   const { activeWorkspace } = useWorkspaceStore();
-  const { activeView } = useUIStore();
   const { showToast } = useToast();
+  const location = useLocation();
+  const [authInitialized, setAuthInitialized] = useState(false);
 
   // Initialize Real-time Sync (Firestore)
   useRealtimeSync();
@@ -39,8 +52,14 @@ export default function App() {
   useSocket();
 
   useEffect(() => {
+    // Ensure route guards do not run before the first auth snapshot arrives.
+    setLoading(true);
+    setAuthInitialized(false);
+
     const unsubscribe = onAuthStateChanged(auth, (user) => {
+      console.log('[Trace][Auth] onAuthStateChanged', { hasUser: !!user, path: window.location.pathname });
       setUser(user);
+      setAuthInitialized(true);
       if (!user) {
         // Reset workspace state on logout to prevent leaking data to next user
         useWorkspaceStore.getState().reset();
@@ -50,7 +69,21 @@ export default function App() {
     return () => unsubscribe();
   }, [setUser, setLoading]);
 
-  if (loading) {
+  useEffect(() => {
+    console.log('[Trace][Router] location change', {
+      path: location.pathname,
+      hasUser: !!user,
+      hasWorkspace: !!activeWorkspace,
+      loading,
+      authInitialized,
+    });
+  }, [location.pathname, user, activeWorkspace, loading, authInitialized]);
+
+  if (loading || !authInitialized) {
+    console.warn('[Trace][Router] blocked by guard', {
+      guard: !authInitialized ? 'auth-init' : 'loading',
+      path: location.pathname,
+    });
     return (
       <div className="min-h-screen music-bg flex items-center justify-center">
         <div className="relative">
@@ -64,29 +97,51 @@ export default function App() {
   }
 
   if (!user) {
+    console.warn('[Trace][Router] blocked by guard', { guard: 'user', path: location.pathname, fallback: 'LoginView' });
     return <LoginView />;
   }
 
-  if (!activeWorkspace) {
-    return <OnboardingView />;
-  }
+  const dashboardPaths = new Set([
+    '/chat',
+    '/kanban',
+    '/documents',
+    '/analytics',
+    '/ai-insights',
+    '/workspace',
+    '/settings',
+  ]);
 
-  const renderView = () => {
-    switch (activeView) {
-      case 'chat': return <ChatDashboard />;
-      case 'kanban': return <KanbanDashboard />;
-      case 'documents': return <DocumentsDashboard />;
-      case 'analytics': return <AnalyticsDashboard />;
-      case 'ai-insights': return <AIInsightsDashboard />;
-      case 'workspace': return <WorkspaceDashboard />;
-      case 'settings': return <SettingsDashboard />;
-      default: return <ChatDashboard />;
+  if (!activeWorkspace) {
+    if (dashboardPaths.has(location.pathname)) {
+      console.warn('[Trace][Router] blocked by guard', {
+        guard: 'workspace',
+        path: location.pathname,
+        fallback: 'OnboardingView',
+      });
     }
-  };
+
+    return (
+      <>
+        <OnboardingView />
+        <WorkspaceModals showToast={showToast} />
+      </>
+    );
+  }
 
   return (
     <MainLayout>
-      {renderView()}
+      <Routes>
+        <Route path="/" element={<Navigate to="/chat" replace />} />
+        <Route path="/chat" element={<RouteMountLogger name="ChatDashboard"><ChatDashboard /></RouteMountLogger>} />
+        <Route path="/kanban" element={<RouteMountLogger name="KanbanDashboard"><KanbanDashboard /></RouteMountLogger>} />
+        <Route path="/documents" element={<RouteMountLogger name="DocumentsDashboard"><DocumentsDashboard /></RouteMountLogger>} />
+        <Route path="/analytics" element={<RouteMountLogger name="AnalyticsDashboard"><AnalyticsDashboard /></RouteMountLogger>} />
+        <Route path="/ai-insights" element={<RouteMountLogger name="AIInsightsDashboard"><AIInsightsDashboard /></RouteMountLogger>} />
+        <Route path="/workspace" element={<RouteMountLogger name="WorkspaceDashboard"><WorkspaceDashboard /></RouteMountLogger>} />
+        <Route path="/workspace/:workspaceId" element={<RouteMountLogger name="WorkspaceDashboard"><WorkspaceDashboard /></RouteMountLogger>} />
+        <Route path="/settings" element={<RouteMountLogger name="SettingsDashboard"><SettingsDashboard /></RouteMountLogger>} />
+        <Route path="*" element={<Navigate to="/chat" replace />} />
+      </Routes>
       
       {/* Global Modals */}
       <WorkspaceModals showToast={showToast} />

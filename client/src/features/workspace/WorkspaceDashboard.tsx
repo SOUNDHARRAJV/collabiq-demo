@@ -17,21 +17,35 @@ export function WorkspaceDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
 
   const handleUpdateRole = async (memberId: string, newRole: 'admin' | 'member') => {
-    if (userRole !== 'admin' || !activeWorkspace) return;
+    console.log('[Trace][UI][WorkspaceDashboard] updateRole click', { memberId, newRole, userRole, workspaceId: activeWorkspace?.id });
+    if (userRole !== 'admin' || !activeWorkspace) {
+      console.warn('[Breakpoint][Flow][WorkspaceDashboard] updateRole blocked by guard', { userRole, hasWorkspace: !!activeWorkspace });
+      return;
+    }
     try {
+      console.log('[Trace][API][Firestore] updateRole start', { workspaceId: activeWorkspace.id, memberId, newRole });
       await updateDoc(doc(db, `workspaces/${activeWorkspace.id}/members`, memberId), {
         role: newRole
       });
+      console.log('[Trace][API][Firestore] updateRole success', { memberId, newRole });
     } catch (error) {
+      console.error('[Trace][API][Firestore] updateRole error', error);
       console.error('Error updating role:', error);
     }
   };
 
   const handleRemoveMember = async (memberId: string) => {
-    if (userRole !== 'admin' || !activeWorkspace) return;
+    console.log('[Trace][UI][WorkspaceDashboard] removeMember click', { memberId, userRole, workspaceId: activeWorkspace?.id });
+    if (userRole !== 'admin' || !activeWorkspace) {
+      console.warn('[Breakpoint][Flow][WorkspaceDashboard] removeMember blocked by guard', { userRole, hasWorkspace: !!activeWorkspace });
+      return;
+    }
     try {
+      console.log('[Trace][API][Firestore] removeMember start', { workspaceId: activeWorkspace.id, memberId });
       await deleteDoc(doc(db, `workspaces/${activeWorkspace.id}/members`, memberId));
+      console.log('[Trace][API][Firestore] removeMember success', { memberId });
     } catch (error) {
+      console.error('[Trace][API][Firestore] removeMember error', error);
       console.error('Error removing member:', error);
     }
   };

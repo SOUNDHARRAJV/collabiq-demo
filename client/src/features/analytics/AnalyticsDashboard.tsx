@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BarChart2, PieChart, TrendingUp, Users, Activity, Sparkles, RefreshCw, ChevronRight, Layout, CheckCircle2, Clock, AlertTriangle } from 'lucide-react';
 import { useWorkspaceStore } from '../../store/useWorkspaceStore';
@@ -37,22 +37,30 @@ export function AnalyticsDashboard() {
     { name: 'Done', value: tasks.filter(t => t.status === 'done').length, color: '#34C759' },
   ];
 
-  const handleRefreshInsights = async () => {
-    if (tasks.length === 0) return;
+  const handleRefreshInsights = useCallback(async () => {
+    console.log('[Trace][UI][AnalyticsDashboard] refresh insights click', { taskCount: tasks.length });
+    if (tasks.length === 0) {
+      console.warn('[Breakpoint][Flow][AnalyticsDashboard] refresh insights blocked by guard (no tasks)');
+      return;
+    }
     setIsRefreshing(true);
     try {
+      console.log('[Trace][API][Gemini] getProjectInsights start', { taskCount: tasks.length });
       const newInsights = await getProjectInsights(tasks);
+      console.log('[Trace][API][Gemini] getProjectInsights success', { insightCount: newInsights.length });
       setInsights(newInsights);
     } catch (error) {
+      console.error('[Trace][API][Gemini] getProjectInsights error', error);
       console.error('Failed to fetch insights:', error);
     } finally {
+      console.log('[Trace][UI][AnalyticsDashboard] refresh insights flow complete');
       setIsRefreshing(false);
     }
-  };
+  }, [tasks]);
 
   useEffect(() => {
     handleRefreshInsights();
-  }, [tasks]);
+  }, [handleRefreshInsights]);
 
   const stats = [
     { label: 'Total Tasks', value: tasks.length, icon: Layout, color: 'text-white' },
