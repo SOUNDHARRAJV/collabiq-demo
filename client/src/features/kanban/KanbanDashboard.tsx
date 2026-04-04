@@ -1,244 +1,250 @@
-import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, MoreVertical, Trash2, Clock, User, AlertCircle, CheckCircle2, ListTodo, PlayCircle, Search, Filter } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { CalendarDays, Loader2, Plus, Search, User2 } from 'lucide-react';
+import { doc, updateDoc } from 'firebase/firestore';
 import { useWorkspaceStore } from '../../store/useWorkspaceStore';
 import { useUIStore } from '../../store/useUIStore';
-import { GlassCard } from '../../components/ui/GlassCard';
 import { GlassButton } from '../../components/ui/GlassButton';
-import { GlassInput } from '../../components/ui/GlassInput';
+import { GlassCard } from '../../components/ui/GlassCard';
 import { db } from '../../firebase';
-import { doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { cn, formatDate } from '../../lib/utils';
-import { Task } from '../../types';
 import { handleFirestoreError, OperationType } from '../../lib/firestore-utils';
+import { Task } from '../../types';
 
-interface KanbanColumnProps {
+type ColumnConfig = {
   title: string;
   status: Task['status'];
-  tasks: Task[];
-  onMoveTask: (id: string, status: Task['status']) => void;
-  onDeleteTask: (id: string) => void;
-  isAdmin: boolean;
-  onAddTask: () => void;
-}
+  accent: string;
+  dot: string;
+};
 
-function KanbanColumn({ title, status, tasks, onMoveTask, onDeleteTask, isAdmin, onAddTask }: KanbanColumnProps) {
-  const [isOver, setIsOver] = useState(false);
+const COLUMNS: ColumnConfig[] = [
+  { title: 'Backlog', status: 'backlog', accent: 'border-slate-400/50', dot: 'bg-slate-400' },
+  { title: 'To Do', status: 'todo', accent: 'border-blue-400/50', dot: 'bg-blue-400' },
+  { title: 'In Progress', status: 'in-progress', accent: 'border-amber-400/50', dot: 'bg-amber-400' },
+  { title: 'Review', status: 'review', accent: 'border-purple-400/50', dot: 'bg-purple-400' },
+  { title: 'Done', status: 'done', accent: 'border-emerald-400/50', dot: 'bg-emerald-400' },
+];
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsOver(true);
-  };
+const STATUS_SHORTCUTS: Record<string, Task['status']> = {
+  '1': 'backlog',
+  '2': 'todo',
+  '3': 'in-progress',
+  '4': 'review',
+  '5': 'done',
+};
 
-  const handleDragLeave = () => setIsOver(false);
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsOver(false);
-    const taskId = e.dataTransfer.getData('taskId');
-    if (taskId) onMoveTask(taskId, status);
-  };
-
-  const getStatusIcon = () => {
-    switch (status) {
-      case 'backlog': return <ListTodo className="w-4 h-4 text-white/30" />;
-      case 'todo': return <AlertCircle className="w-4 h-4 text-music-red" />;
-      case 'in-progress': return <PlayCircle className="w-4 h-4 text-music-purple" />;
-      case 'review': return <Clock className="w-4 h-4 text-amber-400" />;
-      case 'done': return <CheckCircle2 className="w-4 h-4 text-emerald-400" />;
-    }
-  };
-
-  return (
-    <div 
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-      className={cn(
-        "flex-1 min-w-[320px] h-full flex flex-col gap-4 p-4 rounded-2xl transition-all duration-300",
-        isOver ? "bg-white/10 ring-2 ring-music-red/30" : "bg-white/2"
-      )}
-    >
-      <div className="flex items-center justify-between px-2">
-        <div className="flex items-center gap-2">
-          {getStatusIcon()}
-          <h3 className="text-xs font-bold uppercase tracking-widest text-white/50">{title}</h3>
-          <span className="text-[10px] font-bold bg-white/10 px-2 py-0.5 rounded-full text-white/40">
-            {tasks.length}
-          </span>
-        </div>
-        {isAdmin && (
-          <button 
-            onClick={onAddTask}
-            className="p-1.5 rounded-lg hover:bg-white/10 text-white/30 hover:text-white transition-all"
-          >
-            <Plus className="w-4 h-4" />
-          </button>
-        )}
-      </div>
-
-      <div className="flex-1 overflow-y-auto custom-scrollbar space-y-4 pr-1">
-        <AnimatePresence mode="popLayout">
-          {tasks.map((task) => (
-            <motion.div
-              key={task.id}
-              layout
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              draggable
-              onDragStart={(e: any) => e.dataTransfer.setData('taskId', task.id)}
-              className="cursor-grab active:cursor-grabbing"
-            >
-              <GlassCard variant="light" className="group relative p-4 border-l-4 border-l-music-red/50 hover:border-l-music-red transition-all">
-                <div className="flex justify-between items-start mb-2">
-                  <h4 className="text-sm font-semibold leading-tight pr-6">{task.title}</h4>
-                  {isAdmin && (
-                    <button 
-                      onClick={() => onDeleteTask(task.id)}
-                      className="absolute top-3 right-3 p-1.5 opacity-0 group-hover:opacity-100 text-white/20 hover:text-red-400 transition-all"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-                
-                <p className="text-xs text-white/50 line-clamp-2 mb-4 leading-relaxed">
-                  {task.description}
-                </p>
-
-                <div className="flex items-center justify-between mt-auto">
-                  <div className="flex items-center gap-2">
-                    <div className={cn(
-                      "text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-md",
-                      task.priority === 'urgent' ? "bg-red-500/20 text-red-400" :
-                      task.priority === 'high' ? "bg-amber-500/20 text-amber-400" :
-                      task.priority === 'medium' ? "bg-blue-500/20 text-blue-400" :
-                      "bg-white/10 text-white/40"
-                    )}>
-                      {task.priority}
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center gap-2 text-[10px] text-white/30 font-medium">
-                    <Clock className="w-3 h-3" />
-                    <span>{formatDate(task.createdAt)}</span>
-                  </div>
-                </div>
-              </GlassCard>
-            </motion.div>
-          ))}
-        </AnimatePresence>
-        
-        {tasks.length === 0 && (
-          <div className="h-32 border-2 border-dashed border-white/5 rounded-2xl flex items-center justify-center text-white/10">
-            <p className="text-[10px] font-bold uppercase tracking-widest">Empty</p>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+function priorityDot(priority: Task['priority']) {
+  if (priority === 'urgent') return 'bg-red-500';
+  if (priority === 'high') return 'bg-orange-400';
+  if (priority === 'medium') return 'bg-blue-400';
+  return 'bg-slate-300';
 }
 
 export function KanbanDashboard() {
-  const { tasks, activeWorkspace, userRole } = useWorkspaceStore();
-  const { setModal, setShowTaskModal } = useUIStore();
-  const [searchQuery, setSearchQuery] = useState('');
+  const { tasks, members, activeWorkspace, userRole } = useWorkspaceStore();
+  const { setShowTaskModal, setModal } = useUIStore();
+  const [search, setSearch] = useState('');
+  const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null);
+  const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);
 
-  const handleFilterClick = () => {
-    console.warn('[Breakpoint][UI][KanbanDashboard] filter button clicked but filter panel/action is not implemented');
-  };
+  const memberNameMap = useMemo(
+    () => new Map(members.map((member) => [member.uid, member.displayName])),
+    [members]
+  );
 
-  const handleMoveTask = async (taskId: string, newStatus: Task['status']) => {
-    console.log('[Trace][UI][KanbanDashboard] moveTask action', { taskId, newStatus, workspaceId: activeWorkspace?.id });
-    if (!activeWorkspace) {
-      console.warn('[Breakpoint][Flow][KanbanDashboard] moveTask blocked by guard (no workspace)');
-      return;
-    }
-    const path = `workspaces/${activeWorkspace.id}/tasks/${taskId}`;
-    try {
-      console.log('[Trace][API][Firestore] moveTask update start', { path, newStatus });
-      await updateDoc(doc(db, path), {
-        status: newStatus
-      });
-      console.log('[Trace][API][Firestore] moveTask update success', { path, newStatus });
-    } catch (error) {
-      console.error('[Trace][API][Firestore] moveTask update error', error);
-      handleFirestoreError(error, OperationType.UPDATE, path);
-      console.error('Error moving task:', error);
-    }
-  };
+  const filteredTasks = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return tasks;
+    return tasks.filter((task) => {
+      return (
+        task.title.toLowerCase().includes(query) ||
+        task.description.toLowerCase().includes(query) ||
+        (memberNameMap.get(task.assigneeId || '') || '').toLowerCase().includes(query)
+      );
+    });
+  }, [tasks, search, memberNameMap]);
 
-  const handleDeleteTask = (taskId: string) => {
-    console.log('[Trace][UI][KanbanDashboard] deleteTask click', { taskId });
-    setModal({ type: 'deleteTask', data: { taskId } });
-  };
+  const tasksByStatus = useMemo(() => {
+    const grouped: Record<Task['status'], Task[]> = {
+      backlog: [],
+      todo: [],
+      'in-progress': [],
+      review: [],
+      done: [],
+    };
 
-  const handleNewTaskClick = () => {
-    console.log('[Trace][UI][KanbanDashboard] newTask click');
+    filteredTasks.forEach((task) => {
+      grouped[task.status].push(task);
+    });
+
+    return grouped;
+  }, [filteredTasks]);
+
+  const openCreateModal = () => {
+    console.log('[Trace][Kanban] open create modal');
+    setModal({ type: 'newTask', data: {} });
     setShowTaskModal(true);
   };
 
-  const filteredTasks = tasks.filter(t => 
-    t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    t.description.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const openEditModal = (task: Task) => {
+    console.log('[Trace][Kanban] open edit modal', { taskId: task.id });
+    setModal({ type: 'newTask', data: { task } });
+    setShowTaskModal(true);
+  };
 
-  const columns: { title: string; status: Task['status'] }[] = [
-    { title: 'Backlog', status: 'backlog' },
-    { title: 'To Do', status: 'todo' },
-    { title: 'In Progress', status: 'in-progress' },
-    { title: 'Review', status: 'review' },
-    { title: 'Completed', status: 'done' },
-  ];
+  const updateTaskStatus = async (taskId: string, status: Task['status']) => {
+    if (!activeWorkspace?.id) return;
+    const current = tasks.find((task) => task.id === taskId);
+    if (!current || current.status === status) return;
+
+    const path = `workspaces/${activeWorkspace.id}/tasks/${taskId}`;
+    setUpdatingTaskId(taskId);
+
+    try {
+      console.log('[Trace][Kanban] update status start', { taskId, status, path });
+      await updateDoc(doc(db, path), { status });
+      console.log('[Trace][Kanban] update status success', { taskId, status, path });
+    } catch (error) {
+      console.error('[Trace][Kanban] update status error', error);
+      handleFirestoreError(error, OperationType.UPDATE, path);
+    } finally {
+      setUpdatingTaskId(null);
+    }
+  };
+
+  const onCardKeyDown = async (event: React.KeyboardEvent<HTMLDivElement>, task: Task) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      openEditModal(task);
+      return;
+    }
+
+    if (event.altKey && STATUS_SHORTCUTS[event.key]) {
+      event.preventDefault();
+      await updateTaskStatus(task.id, STATUS_SHORTCUTS[event.key]);
+    }
+  };
 
   return (
-    <div className="h-full flex flex-col p-6 gap-6">
-      {/* Toolbar */}
+    <div className="h-full flex flex-col gap-5 p-6">
       <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-4 flex-1">
-          <div className="relative max-w-xs w-full">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
-            <input 
-              type="text" 
-              placeholder="Filter tasks..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full glass-ios-light bg-white/5 border-white/5 rounded-xl pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-music-red/30 transition-all"
-            />
-          </div>
-          <GlassButton variant="secondary" size="sm" className="flex items-center gap-2" onClick={handleFilterClick}>
-            <Filter className="w-4 h-4" />
-            <span>Filter</span>
-          </GlassButton>
+        <div className="relative w-full max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/35" />
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search title, description, assignee"
+            className="w-full glass-ios-light bg-white/5 border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-music-red/30"
+          />
         </div>
-        
+
         {userRole === 'admin' && (
-          <GlassButton 
-            onClick={handleNewTaskClick}
-            className="flex items-center gap-2"
-          >
+          <GlassButton onClick={openCreateModal} className="flex items-center gap-2 whitespace-nowrap">
             <Plus className="w-4 h-4" />
             <span>New Task</span>
           </GlassButton>
         )}
       </div>
 
-      {/* Board */}
-      <div className="flex-1 overflow-x-auto flex gap-6 pb-4 custom-scrollbar">
-        {columns.map((col) => (
-          <KanbanColumn
-            key={col.status}
-            title={col.title}
-            status={col.status}
-            tasks={filteredTasks.filter(t => t.status === col.status)}
-            onMoveTask={handleMoveTask}
-            onDeleteTask={handleDeleteTask}
-            isAdmin={userRole === 'admin'}
-            onAddTask={handleNewTaskClick}
-          />
-        ))}
+      <div className="flex-1 overflow-x-auto pb-2">
+        <div className="min-w-[1320px] h-full grid grid-cols-5 gap-5">
+          {COLUMNS.map((column) => {
+            const columnTasks = tasksByStatus[column.status] || [];
+
+            return (
+              <div
+                key={column.status}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={async () => {
+                  if (!draggingTaskId) return;
+                  await updateTaskStatus(draggingTaskId, column.status);
+                  setDraggingTaskId(null);
+                }}
+                className="h-full rounded-2xl bg-white/5 border border-white/10 p-3 flex flex-col"
+              >
+                <div className="px-2 pb-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className={cn('w-2 h-2 rounded-full', column.dot)} />
+                    <h3 className="text-xs uppercase tracking-widest text-white/60 font-bold">{column.title}</h3>
+                  </div>
+                  <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-white/10 text-white/70">
+                    {columnTasks.length}
+                  </span>
+                </div>
+
+                <div className="flex-1 overflow-y-auto space-y-3 pr-1 custom-scrollbar">
+                  <AnimatePresence mode="popLayout">
+                    {columnTasks.map((task) => {
+                      const assignee = task.assigneeId ? memberNameMap.get(task.assigneeId) : undefined;
+
+                      return (
+                        <motion.div
+                          key={task.id}
+                          layout
+                          draggable
+                          onDragStart={() => setDraggingTaskId(task.id)}
+                          onKeyDown={(event) => onCardKeyDown(event, task)}
+                          tabIndex={0}
+                          role="button"
+                          aria-label={`Open task ${task.title}`}
+                          onClick={() => openEditModal(task)}
+                          className="outline-none"
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.98 }}
+                        >
+                          <GlassCard
+                            variant="light"
+                            className={cn(
+                              'p-4 border-l-4 cursor-pointer focus-within:ring-2 focus-within:ring-music-red/40 hover:bg-white/10 transition-all',
+                              column.accent
+                            )}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <h4 className="text-sm font-semibold leading-snug">{task.title}</h4>
+                              {updatingTaskId === task.id ? <Loader2 className="w-4 h-4 animate-spin text-white/50" /> : null}
+                            </div>
+
+                            <p className="mt-2 text-xs text-white/60 line-clamp-3 min-h-[48px]">
+                              {task.description || 'No description provided.'}
+                            </p>
+
+                            <div className="mt-3 space-y-2 text-[11px] text-white/60">
+                              <div className="flex items-center gap-2">
+                                <span className={cn('w-2 h-2 rounded-full', priorityDot(task.priority))} />
+                                <span className="uppercase tracking-widest font-semibold">{task.priority}</span>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <User2 className="w-3.5 h-3.5" />
+                                <span>{assignee || 'Unassigned'}</span>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <CalendarDays className="w-3.5 h-3.5" />
+                                <span>{task.dueDate ? formatDate(task.dueDate) : 'No due date'}</span>
+                              </div>
+                            </div>
+                          </GlassCard>
+                        </motion.div>
+                      );
+                    })}
+                  </AnimatePresence>
+
+                  {columnTasks.length === 0 ? (
+                    <div className="h-36 rounded-2xl border border-dashed border-white/15 flex items-center justify-center text-center px-4">
+                      <p className="text-xs text-white/35">No tasks in {column.title}. Drop a task here.</p>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
+
+      <p className="text-[11px] text-white/35">Keyboard shortcuts: focus a task and press Alt+1..5 to move it across columns.</p>
     </div>
   );
 }

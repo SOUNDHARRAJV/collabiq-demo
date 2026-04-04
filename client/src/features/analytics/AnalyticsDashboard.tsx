@@ -1,223 +1,248 @@
-import { useState, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { BarChart2, PieChart, TrendingUp, Users, Activity, Sparkles, RefreshCw, ChevronRight, Layout, CheckCircle2, Clock, AlertTriangle } from 'lucide-react';
+import { ComponentType, useMemo } from 'react';
+import {
+  BarChart,
+  Bar,
+  CartesianGrid,
+  Cell,
+  Legend,
+  Line,
+  LineChart,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
+import { Activity, CheckCircle2, Clock3, ListTodo, Users } from 'lucide-react';
 import { useWorkspaceStore } from '../../store/useWorkspaceStore';
 import { GlassCard } from '../../components/ui/GlassCard';
-import { GlassButton } from '../../components/ui/GlassButton';
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer, 
-  Cell,
-  PieChart as RePieChart,
-  Pie
-} from 'recharts';
-import { getProjectInsights } from '../../services';
-import { cn } from '../../lib/utils';
+import { Task } from '../../types';
+
+const PRIORITY_COLORS: Record<Task['priority'], string> = {
+  low: '#94A3B8',
+  medium: '#3B82F6',
+  high: '#F59E0B',
+  urgent: '#EF4444',
+};
+
+const STATUS_COLORS: Record<Task['status'], string> = {
+  backlog: '#94A3B8',
+  todo: '#3B82F6',
+  'in-progress': '#F59E0B',
+  review: '#A855F7',
+  done: '#22C55E',
+};
+
+function hoursBetween(from: number, to: number) {
+  return (to - from) / (1000 * 60 * 60);
+}
+
+function MetricCard({
+  label,
+  value,
+  helper,
+  icon: Icon,
+}: {
+  label: string;
+  value: string | number;
+  helper: string;
+  icon: ComponentType<{ className?: string }>;
+}) {
+  return (
+    <GlassCard variant="light" className="p-5 flex items-center gap-4">
+      <div className="w-11 h-11 rounded-xl bg-white/10 flex items-center justify-center">
+        <Icon className="w-5 h-5 text-music-red" />
+      </div>
+      <div>
+        <p className="text-[10px] uppercase tracking-widest text-white/40 font-bold">{label}</p>
+        <p className="text-2xl font-bold leading-tight">{value}</p>
+        <p className="text-[11px] text-white/40">{helper}</p>
+      </div>
+    </GlassCard>
+  );
+}
 
 export function AnalyticsDashboard() {
   const { tasks, members } = useWorkspaceStore();
-  const [insights, setInsights] = useState<string[]>([]);
-  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const workloadData = members.map(member => ({
-    name: member.displayName,
-    tasks: tasks.filter(t => t.assigneeId === member.uid).length
-  }));
+  const metrics = useMemo(() => {
+    const total = tasks.length;
+    const completed = tasks.filter((task) => task.status === 'done');
+    const inProgress = tasks.filter((task) => task.status === 'in-progress').length;
+    const doneCount = completed.length;
+    const completionRate = total > 0 ? Math.round((doneCount / total) * 100) : 0;
 
-  const statusData = [
-    { name: 'Backlog', value: tasks.filter(t => t.status === 'backlog').length, color: '#FFFFFF33' },
-    { name: 'To Do', value: tasks.filter(t => t.status === 'todo').length, color: '#FF2D55' },
-    { name: 'In Progress', value: tasks.filter(t => t.status === 'in-progress').length, color: '#AF52DE' },
-    { name: 'Review', value: tasks.filter(t => t.status === 'review').length, color: '#FFCC00' },
-    { name: 'Done', value: tasks.filter(t => t.status === 'done').length, color: '#34C759' },
-  ];
+    const averageCompletionHours = doneCount
+      ? Math.round(
+          completed.reduce((sum, task) => sum + Math.max(0, hoursBetween(task.createdAt, Date.now())), 0) / doneCount
+        )
+      : 0;
 
-  const handleRefreshInsights = useCallback(async () => {
-    console.log('[Trace][UI][AnalyticsDashboard] refresh insights click', { taskCount: tasks.length });
-    if (tasks.length === 0) {
-      console.warn('[Breakpoint][Flow][AnalyticsDashboard] refresh insights blocked by guard (no tasks)');
-      return;
-    }
-    setIsRefreshing(true);
-    try {
-      console.log('[Trace][API][Gemini] getProjectInsights start', { taskCount: tasks.length });
-      const newInsights = await getProjectInsights(tasks);
-      console.log('[Trace][API][Gemini] getProjectInsights success', { insightCount: newInsights.length });
-      setInsights(newInsights);
-    } catch (error) {
-      console.error('[Trace][API][Gemini] getProjectInsights error', error);
-      console.error('Failed to fetch insights:', error);
-    } finally {
-      console.log('[Trace][UI][AnalyticsDashboard] refresh insights flow complete');
-      setIsRefreshing(false);
-    }
+    console.log('[Trace][Analytics] metrics recomputed', {
+      total,
+      doneCount,
+      inProgress,
+      completionRate,
+      averageCompletionHours,
+    });
+
+    return {
+      total,
+      doneCount,
+      inProgress,
+      completionRate,
+      averageCompletionHours,
+      memberCount: members.length,
+    };
+  }, [tasks, members.length]);
+
+  const statusData = useMemo(
+    () => [
+      { name: 'Backlog', value: tasks.filter((task) => task.status === 'backlog').length, color: STATUS_COLORS.backlog },
+      { name: 'To Do', value: tasks.filter((task) => task.status === 'todo').length, color: STATUS_COLORS.todo },
+      {
+        name: 'In Progress',
+        value: tasks.filter((task) => task.status === 'in-progress').length,
+        color: STATUS_COLORS['in-progress'],
+      },
+      { name: 'Review', value: tasks.filter((task) => task.status === 'review').length, color: STATUS_COLORS.review },
+      { name: 'Done', value: tasks.filter((task) => task.status === 'done').length, color: STATUS_COLORS.done },
+    ],
+    [tasks]
+  );
+
+  const priorityData = useMemo(
+    () => [
+      { name: 'Low', value: tasks.filter((task) => task.priority === 'low').length, color: PRIORITY_COLORS.low },
+      { name: 'Medium', value: tasks.filter((task) => task.priority === 'medium').length, color: PRIORITY_COLORS.medium },
+      { name: 'High', value: tasks.filter((task) => task.priority === 'high').length, color: PRIORITY_COLORS.high },
+      { name: 'Urgent', value: tasks.filter((task) => task.priority === 'urgent').length, color: PRIORITY_COLORS.urgent },
+    ],
+    [tasks]
+  );
+
+  const workloadData = useMemo(() => {
+    return members.map((member) => ({
+      name: member.displayName,
+      tasks: tasks.filter((task) => task.assigneeId === member.uid).length,
+    }));
+  }, [members, tasks]);
+
+  const trendData = useMemo(() => {
+    const byDay = new Map<string, number>();
+    tasks.forEach((task) => {
+      const day = new Date(task.createdAt).toISOString().slice(0, 10);
+      byDay.set(day, (byDay.get(day) || 0) + 1);
+    });
+
+    return Array.from(byDay.entries())
+      .sort(([a], [b]) => (a < b ? -1 : 1))
+      .map(([day, created]) => ({ day: day.slice(5), created }));
   }, [tasks]);
 
-  useEffect(() => {
-    handleRefreshInsights();
-  }, [handleRefreshInsights]);
-
-  const stats = [
-    { label: 'Total Tasks', value: tasks.length, icon: Layout, color: 'text-white' },
-    { label: 'Completed', value: tasks.filter(t => t.status === 'done').length, icon: CheckCircle2, color: 'text-emerald-400' },
-    { label: 'In Progress', value: tasks.filter(t => t.status === 'in-progress').length, icon: Activity, color: 'text-music-purple' },
-    { label: 'Urgent', value: tasks.filter(t => t.priority === 'urgent').length, icon: AlertTriangle, color: 'text-music-red' },
-  ];
+  const hasData = tasks.length > 0;
 
   return (
-    <div className="h-full flex flex-col p-6 gap-6 overflow-y-auto custom-scrollbar">
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat, idx) => (
-          <GlassCard key={idx} variant="light" className="flex items-center gap-4 p-6">
-            <div className={cn("w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center", stat.color)}>
-              <stat.icon className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">{stat.label}</p>
-              <p className="text-2xl font-bold tracking-tight">{stat.value}</p>
+    <div className="h-full p-6 overflow-y-auto custom-scrollbar space-y-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <MetricCard label="Total Tasks" value={metrics.total} helper="All statuses" icon={ListTodo} />
+        <MetricCard label="In Progress" value={metrics.inProgress} helper="Currently active" icon={Activity} />
+        <MetricCard label="Completed" value={metrics.doneCount} helper={`${metrics.completionRate}% completion`} icon={CheckCircle2} />
+        <MetricCard label="Team Members" value={metrics.memberCount} helper="Available assignees" icon={Users} />
+      </div>
+
+      {!hasData ? (
+        <GlassCard className="p-10 text-center">
+          <p className="text-lg font-semibold">No analytics data yet</p>
+          <p className="text-sm text-white/50 mt-2">Create tasks to populate status, priority, and workload charts.</p>
+        </GlassCard>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+            <GlassCard className="h-96 p-5">
+              <p className="text-xs uppercase tracking-widest text-white/50 mb-4">Task Status Breakdown</p>
+              <ResponsiveContainer width="100%" height="92%">
+                <PieChart>
+                  <Pie data={statusData} dataKey="value" nameKey="name" innerRadius={60} outerRadius={100} paddingAngle={4}>
+                    {statusData.map((entry) => (
+                      <Cell key={entry.name} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip contentStyle={{ backgroundColor: '#12121A', border: '1px solid #ffffff20' }} />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            </GlassCard>
+
+            <GlassCard className="h-96 p-5">
+              <p className="text-xs uppercase tracking-widest text-white/50 mb-4">Priority Distribution</p>
+              <ResponsiveContainer width="100%" height="92%">
+                <BarChart data={priorityData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff12" vertical={false} />
+                  <XAxis dataKey="name" stroke="#ffffff70" />
+                  <YAxis stroke="#ffffff70" allowDecimals={false} />
+                  <Tooltip contentStyle={{ backgroundColor: '#12121A', border: '1px solid #ffffff20' }} />
+                  <Bar dataKey="value" radius={[8, 8, 0, 0]}>
+                    {priorityData.map((entry) => (
+                      <Cell key={entry.name} fill={entry.color} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </GlassCard>
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+            <GlassCard className="h-96 p-5">
+              <p className="text-xs uppercase tracking-widest text-white/50 mb-4">Team Workload</p>
+              <ResponsiveContainer width="100%" height="92%">
+                <BarChart data={workloadData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff12" vertical={false} />
+                  <XAxis dataKey="name" stroke="#ffffff70" />
+                  <YAxis stroke="#ffffff70" allowDecimals={false} />
+                  <Tooltip contentStyle={{ backgroundColor: '#12121A', border: '1px solid #ffffff20' }} />
+                  <Bar dataKey="tasks" fill="#FF2D55" radius={[8, 8, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </GlassCard>
+
+            <GlassCard className="h-96 p-5">
+              <p className="text-xs uppercase tracking-widest text-white/50 mb-4">Task Creation Trend</p>
+              <ResponsiveContainer width="100%" height="92%">
+                <LineChart data={trendData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff12" vertical={false} />
+                  <XAxis dataKey="day" stroke="#ffffff70" />
+                  <YAxis stroke="#ffffff70" allowDecimals={false} />
+                  <Tooltip contentStyle={{ backgroundColor: '#12121A', border: '1px solid #ffffff20' }} />
+                  <Line type="monotone" dataKey="created" stroke="#A855F7" strokeWidth={3} dot={{ r: 3 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </GlassCard>
+          </div>
+
+          <GlassCard variant="dark" className="p-5">
+            <p className="text-xs uppercase tracking-widest text-white/50 mb-3">Quick Insights</p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="rounded-xl bg-white/5 border border-white/10 p-4">
+                <p className="text-[11px] text-white/50">Completion Rate</p>
+                <p className="text-xl font-bold mt-1">{metrics.completionRate}%</p>
+              </div>
+              <div className="rounded-xl bg-white/5 border border-white/10 p-4">
+                <p className="text-[11px] text-white/50">Average Completion Time</p>
+                <p className="text-xl font-bold mt-1 flex items-center gap-2">
+                  <Clock3 className="w-4 h-4 text-white/70" />
+                  {metrics.averageCompletionHours}h
+                </p>
+              </div>
+              <div className="rounded-xl bg-white/5 border border-white/10 p-4">
+                <p className="text-[11px] text-white/50">Unassigned Tasks</p>
+                <p className="text-xl font-bold mt-1">{tasks.filter((task) => !task.assigneeId).length}</p>
+              </div>
             </div>
           </GlassCard>
-        ))}
-      </div>
-
-      {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Workload Distribution */}
-        <GlassCard className="h-96 flex flex-col p-6">
-          <div className="flex items-center justify-between mb-8">
-            <div className="flex items-center gap-2">
-              <Users className="w-4 h-4 text-music-red" />
-              <h3 className="text-xs font-bold uppercase tracking-widest text-white/50">Workload Distribution</h3>
-            </div>
-          </div>
-          <div className="flex-1 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={workloadData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" vertical={false} />
-                <XAxis 
-                  dataKey="name" 
-                  stroke="#ffffff33" 
-                  fontSize={10} 
-                  tickLine={false} 
-                  axisLine={false}
-                />
-                <YAxis 
-                  stroke="#ffffff33" 
-                  fontSize={10} 
-                  tickLine={false} 
-                  axisLine={false}
-                />
-                <Tooltip 
-                  contentStyle={{ backgroundColor: '#12121A', border: '1px solid #ffffff10', borderRadius: '12px', fontSize: '12px' }}
-                  cursor={{ fill: '#ffffff05' }}
-                />
-                <Bar dataKey="tasks" radius={[4, 4, 0, 0]}>
-                  {workloadData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={index % 2 === 0 ? '#FF2D55' : '#AF52DE'} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </GlassCard>
-
-        {/* Task Status Breakdown */}
-        <GlassCard className="h-96 flex flex-col p-6">
-          <div className="flex items-center justify-between mb-8">
-            <div className="flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-music-purple" />
-              <h3 className="text-xs font-bold uppercase tracking-widest text-white/50">Task Status</h3>
-            </div>
-          </div>
-          <div className="flex-1 w-full flex items-center justify-center">
-            <ResponsiveContainer width="100%" height="100%">
-              <RePieChart>
-                <Pie
-                  data={statusData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={100}
-                  paddingAngle={8}
-                  dataKey="value"
-                >
-                  {statusData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />
-                  ))}
-                </Pie>
-                <Tooltip 
-                  contentStyle={{ backgroundColor: '#12121A', border: '1px solid #ffffff10', borderRadius: '12px', fontSize: '12px' }}
-                />
-              </RePieChart>
-            </ResponsiveContainer>
-            <div className="flex flex-col gap-3 pr-8">
-              {statusData.map((entry, idx) => (
-                <div key={idx} className="flex items-center gap-3">
-                  <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: entry.color }} />
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-white/50">{entry.name}</span>
-                  <span className="text-xs font-bold ml-auto">{entry.value}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </GlassCard>
-      </div>
-
-      {/* AI Insights Section */}
-      <GlassCard variant="dark" className="p-8">
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-music-red to-music-purple flex items-center justify-center shadow-lg shadow-music-red/30">
-              <Sparkles className="text-white w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="text-lg font-bold tracking-tight">AI Project Insights</h3>
-              <p className="text-xs text-white/30 font-medium">Actionable intelligence based on current velocity</p>
-            </div>
-          </div>
-          <GlassButton 
-            variant="secondary" 
-            size="sm" 
-            onClick={handleRefreshInsights}
-            disabled={isRefreshing}
-            className="flex items-center gap-2"
-          >
-            <RefreshCw className={cn("w-3.5 h-3.5", isRefreshing && "animate-spin")} />
-            <span>Refresh</span>
-          </GlassButton>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {insights.length > 0 ? insights.map((insight, idx) => (
-            <motion.div
-              key={idx}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: idx * 0.1 }}
-            >
-              <GlassCard variant="light" className="h-full p-6 border-l-4 border-l-music-purple/50 hover:border-l-music-purple transition-all">
-                <div className="flex items-start gap-3">
-                  <div className="w-6 h-6 rounded-full bg-music-purple/20 flex items-center justify-center text-music-purple text-[10px] font-bold">
-                    {idx + 1}
-                  </div>
-                  <p className="text-sm leading-relaxed text-white/80">{insight}</p>
-                </div>
-              </GlassCard>
-            </motion.div>
-          )) : (
-            <div className="col-span-3 py-12 text-center opacity-20">
-              <Sparkles className="w-12 h-12 mx-auto mb-4" />
-              <p className="text-xs font-bold uppercase tracking-widest">Generating insights...</p>
-            </div>
-          )}
-        </div>
-      </GlassCard>
+        </>
+      )}
     </div>
   );
 }

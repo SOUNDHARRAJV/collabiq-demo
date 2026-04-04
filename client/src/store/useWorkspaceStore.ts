@@ -12,6 +12,7 @@ function resolveNext<T>(prev: T, next: Updater<T>): T {
 interface WorkspaceState {
   activeWorkspace: Workspace | null;
   members: Member[];
+  activeUserIds: string[];
   messages: Message[];
   tasks: Task[];
   documents: Document[];
@@ -23,6 +24,7 @@ interface WorkspaceState {
   setWorkspace: (workspace: Updater<Workspace | null>) => void;
   setActiveWorkspace: (workspace: Updater<Workspace | null>) => void;
   setMembers: (members: Updater<Member[]>) => void;
+  setActiveUserIds: (userIds: Updater<string[]>) => void;
   setMessages: (messages: Updater<Message[]>) => void;
   setTasks: (tasks: Updater<Task[]>) => void;
   setDocuments: (documents: Updater<Document[]>) => void;
@@ -44,6 +46,7 @@ interface WorkspaceState {
 export const useWorkspaceStore = create<WorkspaceState>()(persist((set) => ({
   activeWorkspace: null,
   members: [],
+  activeUserIds: [],
   messages: [],
   tasks: [],
   documents: [],
@@ -75,6 +78,14 @@ export const useWorkspaceStore = create<WorkspaceState>()(persist((set) => ({
       if (DEBUG) console.log('[Trace][Store][Workspace] setMembers', { prev: state.members.length, next: nextMembers.length });
       if (nextMembers === state.members) return state;
       return { members: nextMembers };
+    });
+  },
+  setActiveUserIds: (userIds) => {
+    set((state) => {
+      const nextIds = resolveNext(state.activeUserIds, userIds);
+      if (DEBUG) console.log('[Trace][Store][Workspace] setActiveUserIds', { prev: state.activeUserIds.length, next: nextIds.length });
+      if (nextIds === state.activeUserIds) return state;
+      return { activeUserIds: nextIds };
     });
   },
   setMessages: (messages) => {
@@ -236,6 +247,7 @@ export const useWorkspaceStore = create<WorkspaceState>()(persist((set) => ({
     set({
       activeWorkspace: null,
       members: [],
+      activeUserIds: [],
       messages: [],
       tasks: [],
       documents: [],

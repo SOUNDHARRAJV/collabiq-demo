@@ -26,16 +26,57 @@ export async function analyzeDiscussion(messages: any[]) {
     }
 
     const ai = getAiClient();
-    const chatContext = messages.map(m => `${m.userName}: ${m.text}`).join('\n');
+    const chatContext = messages
+      .map((message, index) => {
+        const when = message.timestamp ? new Date(message.timestamp).toISOString() : 'unknown-time';
+        return `${index + 1}. [${when}] ${message.userName}: ${message.text}`;
+      })
+      .join('\n');
+
+    const extractionPrompt = `You are an expert project coordinator extracting structured outputs from team chat logs.
+
+Return STRICT JSON only with this shape:
+{
+  "tasks": [
+    {
+      "title": string,
+      "description": string,
+      "priority": "low"|"medium"|"high"|"urgent",
+      "owner": string|null
+    }
+  ],
+  "decisions": string[],
+  "risks": string[]
+}
+
+Rules:
+1) Extract only actionable tasks with a clear work verb (build, implement, write, test, design, deploy, review, fix).
+2) Ignore non-actionable statements (status updates, summaries, opinions, greetings, or "we discussed" statements).
+3) Owner extraction:
+- If text says "<Name> will...", "I'll...", "I will...", "<Name> is doing...", assign that person.
+- For "I" statements, owner is that message speaker.
+- If no owner is clear, set owner to null.
+4) Priority mapping:
+- urgent: today, tonight, ASAP, immediately, tomorrow, specific near deadline (e.g. Friday when current week implied).
+- high: this week / soon / blocker-sensitive tasks.
+- medium: normal planned work.
+- low: optional or nice-to-have tasks.
+5) Description must include what to do and why/context from chat when possible.
+6) De-duplicate similar tasks.
+7) Decisions are concrete commitments or agreed responsibilities.
+8) Risks are timeline, dependency, quality, scope, or resource concerns.
+
+Examples:
+- "Sarah will finish API by tomorrow" -> task owner Sarah, priority urgent.
+- "I'll handle database schema tonight" from John -> owner John, priority urgent.
+- "We discussed testing strategy" -> not a task.
+
+Chat transcript:
+${chatContext}`;
     
     const response = await ai.models.generateContent({
       model: "gemini-2.0-flash",
-      contents: `Analyze the following team discussion and extract any new tasks, decisions, or project risks.
-    
-Discussion:
-${chatContext}
-
-Return ONLY valid JSON with tasks (title, description, priority), decisions (strings), and risks (strings).`,
+      contents: extractionPrompt,
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -48,7 +89,8 @@ Return ONLY valid JSON with tasks (title, description, priority), decisions (str
                 properties: {
                   title: { type: Type.STRING },
                   description: { type: Type.STRING },
-                  priority: { type: Type.STRING, enum: ['low', 'medium', 'high', 'urgent'] }
+                  priority: { type: Type.STRING, enum: ['low', 'medium', 'high', 'urgent'] },
+                  owner: { type: Type.STRING, nullable: true }
                 },
                 required: ['title', 'description', 'priority']
               }
@@ -67,18 +109,33 @@ Return ONLY valid JSON with tasks (title, description, priority), decisions (str
       }
     });
 
-    const parsed = JSON.parse(response.text);
+    const parsed = JSON.parse(response.text || '{}');
     console.log('[Trace][API][Gemini] analyzeDiscussion parsed', {
       tasks: Array.isArray(parsed.tasks) ? parsed.tasks.length : 0,
       decisions: Array.isArray(parsed.decisions) ? parsed.decisions.length : 0,
       risks: Array.isArray(parsed.risks) ? parsed.risks.length : 0,
     });
-    
-    // Validate response structure
+
+    const validPriorities = new Set(['low', 'medium', 'high', 'urgent']);
+    const safeTasks = Array.isArray(parsed.tasks)
+      ? parsed.tasks
+          .filter((task: any) => task && typeof task.title === 'string' && typeof task.description === 'string')
+          .map((task: any) => ({
+            title: task.title.trim().slice(0, 200),
+            description: task.description.trim().slice(0, 1500),
+            priority: validPriorities.has(task.priority) ? task.priority : 'medium',
+            owner: typeof task.owner === 'string' && task.owner.trim() ? task.owner.trim().slice(0, 120) : null,
+          }))
+      : [];
+
     return {
-      tasks: Array.isArray(parsed.tasks) ? parsed.tasks : [],
-      decisions: Array.isArray(parsed.decisions) ? parsed.decisions : [],
-      risks: Array.isArray(parsed.risks) ? parsed.risks : []
+      tasks: safeTasks,
+      decisions: Array.isArray(parsed.decisions)
+        ? parsed.decisions.filter((item: any) => typeof item === 'string').map((item: string) => item.trim()).filter(Boolean)
+        : [],
+      risks: Array.isArray(parsed.risks)
+        ? parsed.risks.filter((item: any) => typeof item === 'string').map((item: string) => item.trim()).filter(Boolean)
+        : []
     };
   } catch (error) {
     console.error('[Trace][API][Gemini] analyzeDiscussion error', error);

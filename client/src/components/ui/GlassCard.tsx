@@ -1,4 +1,5 @@
 import { ReactNode } from 'react';
+import { motion } from 'framer-motion';
 import { cn } from '../../lib/utils';
 
 interface GlassCardProps {
@@ -17,8 +18,9 @@ export function GlassCard({ children, className, variant = 'default', hover = fa
   };
 
   return (
-    <div 
+    <motion.div 
       onClick={onClick}
+      whileHover={hover ? { y: -2 } : undefined}
       className={cn(
         variants[variant],
         'rounded-2xl p-4 transition-all duration-300',
@@ -27,6 +29,6 @@ export function GlassCard({ children, className, variant = 'default', hover = fa
       )}
     >
       {children}
-    </div>
+    </motion.div>
   );
 }

@@ -1,10 +1,18 @@
 import { useEffect } from 'react';
 import { collection, onSnapshot, query, orderBy, doc } from 'firebase/firestore';
-import { db, auth } from '../firebase';
+import { db } from '../firebase';
 import { useWorkspaceStore } from '../store/useWorkspaceStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { Message, Task, Document, Decision, Risk, Member, Workspace } from '../types';
-import { handleFirestoreError, OperationType } from '../lib/firestore-utils';
+
+const toNumber = (value: unknown, fallback = Date.now()) => {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return fallback;
+};
 
 export function useRealtimeSync() {
   const { user } = useAuthStore();
@@ -37,7 +45,18 @@ export function useRealtimeSync() {
     );
     const unsubMessages = onSnapshot(qMessages, (snapshot) => {
       console.log('[Trace][Realtime] messages snapshot', { count: snapshot.docs.length });
-      setMessages(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Message)));
+      const normalized = snapshot.docs.map((docItem) => {
+        const raw = docItem.data() as Partial<Message>;
+        return {
+          id: docItem.id,
+          text: raw.text ?? '',
+          userId: raw.userId ?? '',
+          userName: raw.userName ?? 'Unknown',
+          userPhoto: raw.userPhoto ?? '',
+          timestamp: toNumber(raw.timestamp, 0),
+        } as Message;
+      });
+      setMessages(normalized);
     }, (error) => {
       console.error('[Trace][Realtime] messages listener error', error);
       console.error('Failed to sync messages:', error);
@@ -52,7 +71,20 @@ export function useRealtimeSync() {
     );
     const unsubTasks = onSnapshot(qTasks, (snapshot) => {
       console.log('[Trace][Realtime] tasks snapshot', { count: snapshot.docs.length });
-      setTasks(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Task)));
+      const normalized = snapshot.docs.map((docItem) => {
+        const raw = docItem.data() as Partial<Task>;
+        return {
+          id: docItem.id,
+          title: raw.title ?? '',
+          description: raw.description ?? '',
+          status: (raw.status as Task['status']) ?? 'backlog',
+          priority: (raw.priority as Task['priority']) ?? 'medium',
+          assigneeId: raw.assigneeId || '',
+          dueDate: raw.dueDate || '',
+          createdAt: toNumber(raw.createdAt, Date.now()),
+        } as Task;
+      });
+      setTasks(normalized);
     }, (error) => {
       console.error('[Trace][Realtime] tasks listener error', error);
       console.error('Failed to sync tasks:', error);
@@ -67,7 +99,17 @@ export function useRealtimeSync() {
     );
     const unsubDocs = onSnapshot(qDocs, (snapshot) => {
       console.log('[Trace][Realtime] documents snapshot', { count: snapshot.docs.length });
-      setDocuments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Document)));
+      const normalized = snapshot.docs.map((docItem) => {
+        const raw = docItem.data() as Partial<Document>;
+        return {
+          id: docItem.id,
+          title: raw.title ?? '',
+          content: raw.content ?? '',
+          lastEditedBy: raw.lastEditedBy ?? '',
+          updatedAt: toNumber(raw.updatedAt, Date.now()),
+        } as Document;
+      });
+      setDocuments(normalized);
     }, (error) => {
       console.error('[Trace][Realtime] documents listener error', error);
       console.error('Failed to sync documents:', error);
@@ -82,7 +124,15 @@ export function useRealtimeSync() {
     );
     const unsubDecisions = onSnapshot(qDecisions, (snapshot) => {
       console.log('[Trace][Realtime] decisions snapshot', { count: snapshot.docs.length });
-      setDecisions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Decision)));
+      const normalized = snapshot.docs.map((docItem) => {
+        const raw = docItem.data() as Partial<Decision>;
+        return {
+          id: docItem.id,
+          text: raw.text ?? '',
+          timestamp: toNumber(raw.timestamp, Date.now()),
+        } as Decision;
+      });
+      setDecisions(normalized);
     }, (error) => {
       console.error('[Trace][Realtime] decisions listener error', error);
       console.error('Failed to sync decisions:', error);
@@ -97,7 +147,15 @@ export function useRealtimeSync() {
     );
     const unsubRisks = onSnapshot(qRisks, (snapshot) => {
       console.log('[Trace][Realtime] risks snapshot', { count: snapshot.docs.length });
-      setRisks(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Risk)));
+      const normalized = snapshot.docs.map((docItem) => {
+        const raw = docItem.data() as Partial<Risk>;
+        return {
+          id: docItem.id,
+          text: raw.text ?? '',
+          timestamp: toNumber(raw.timestamp, Date.now()),
+        } as Risk;
+      });
+      setRisks(normalized);
     }, (error) => {
       console.error('[Trace][Realtime] risks listener error', error);
       console.error('Failed to sync risks:', error);
@@ -108,7 +166,17 @@ export function useRealtimeSync() {
     const membersPath = `workspaces/${activeWorkspace.id}/members`;
     const qMembers = query(collection(db, membersPath));
     const unsubMembers = onSnapshot(qMembers, (snapshot) => {
-      const membersList = snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() } as Member));
+      const membersList = snapshot.docs.map((docItem) => {
+        const raw = docItem.data() as Partial<Member>;
+        return {
+          uid: docItem.id,
+          email: raw.email ?? '',
+          displayName: raw.displayName ?? 'Unknown Member',
+          photoURL: raw.photoURL ?? '',
+          role: raw.role === 'admin' ? 'admin' : 'member',
+          isOnline: !!raw.isOnline,
+        } as Member;
+      });
       console.log('[Trace][Realtime] members snapshot', { count: membersList.length });
       setMembers(membersList);
       
@@ -132,11 +200,19 @@ export function useRealtimeSync() {
     });
 
     // Workspace Metadata (for name and member updates)
-    const workspacePath = `workspaces/${activeWorkspace.id}`;
     const unsubWorkspace = onSnapshot(doc(db, 'workspaces', activeWorkspace.id), (snapshot) => {
       if (snapshot.exists()) {
         console.log('[Trace][Realtime] workspace snapshot', { workspaceId: snapshot.id });
-        setWorkspace({ id: snapshot.id, ...snapshot.data() } as Workspace);
+        const raw = snapshot.data() as Partial<Workspace>;
+        setWorkspace({
+          id: snapshot.id,
+          name: raw.name ?? 'Workspace',
+          ownerId: raw.ownerId ?? '',
+          members: Array.isArray(raw.members) ? raw.members : [],
+          createdAt: toNumber(raw.createdAt, Date.now()),
+          teamId: raw.teamId,
+          createdBy: raw.createdBy,
+        });
       }
     }, (error) => {
       console.error('[Trace][Realtime] workspace listener error', error);

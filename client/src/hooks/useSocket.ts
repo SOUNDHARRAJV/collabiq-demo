@@ -12,7 +12,7 @@ type PresenceUpdate = {
 export function useSocket() {
   const socketRef = useRef<Socket | null>(null);
   const previousWorkspaceRef = useRef<string | null>(null);
-  const { activeWorkspace, addOrUpdateMember, members } = useWorkspaceStore();
+  const { activeWorkspace, addOrUpdateMember, members, setActiveUserIds } = useWorkspaceStore();
   const { user } = useAuthStore();
   const lastPresenceRef = useRef<number>(0);
   const membersRef = useRef(members);
@@ -27,6 +27,7 @@ export function useSocket() {
   useEffect(() => {
     if (!activeWorkspace || !user) {
       console.log('[Trace][Socket] skip connect', { hasWorkspace: !!activeWorkspace, hasUser: !!user });
+      setActiveUserIds([]);
       return;
     }
 
@@ -40,7 +41,8 @@ export function useSocket() {
 
     // Initialize socket connection once
     if (!socketRef.current) {
-      const socket = io({
+      const socketUrl = import.meta.env.VITE_SOCKET_URL || undefined;
+      const socket = io(socketUrl, {
         reconnection: true,
         reconnectionDelay: 100,
         reconnectionDelayMax: 5000,
@@ -61,6 +63,7 @@ export function useSocket() {
             if (ack?.success) {
               console.log('[Trace][Socket] join-workspace ack success', { workspaceId: activeWorkspace.id, activeUsers: ack.activeUsers?.length ?? 0 });
               lastActiveUsersRef.current = Array.isArray(ack.activeUsers) ? ack.activeUsers : [];
+              setActiveUserIds(lastActiveUsersRef.current);
               updateMemberOnlineStatus(lastActiveUsersRef.current, 'join-ack');
             } else {
               console.error('[Trace][Socket] join-workspace ack error', ack?.error);
@@ -76,6 +79,7 @@ export function useSocket() {
       socket.on('disconnect', (reason) => {
         console.log('[Trace][Socket] disconnected', { reason });
         setGlobalSocket(null);
+        setActiveUserIds([]);
         // Mark all members as offline on disconnect
         membersRef.current.forEach((m) => {
           if (m.isOnline) {
@@ -94,6 +98,7 @@ export function useSocket() {
 
         console.log('[Trace][Socket] presence-update received', { activeUsers: data.activeUsers.length, timestamp: data.timestamp });
         lastActiveUsersRef.current = Array.isArray(data.activeUsers) ? data.activeUsers : [];
+        setActiveUserIds(lastActiveUsersRef.current);
         updateMemberOnlineStatus(lastActiveUsersRef.current, 'presence-update');
       });
 
@@ -114,6 +119,7 @@ export function useSocket() {
           if (ack?.success) {
             console.log('[Trace][Socket] join-workspace (switch) ack success', { workspaceId: activeWorkspace.id, activeUsers: ack.activeUsers?.length ?? 0 });
             lastActiveUsersRef.current = Array.isArray(ack.activeUsers) ? ack.activeUsers : [];
+            setActiveUserIds(lastActiveUsersRef.current);
             updateMemberOnlineStatus(lastActiveUsersRef.current, 'join-ack-switch');
           } else {
             console.error('[Trace][Socket] join-workspace (switch) ack error', ack?.error);
@@ -127,10 +133,12 @@ export function useSocket() {
 
     // Cleanup on unmount or workspace change
     return () => {
-      // Don't disconnect socket on unmount - keep connection alive for multi-tab
-      // Socket will handle workspace transitions via join-workspace events
+      if (socketRef.current && activeWorkspace?.id && user?.uid) {
+        console.log('[Trace][Socket] leave-workspace emit', { workspaceId: activeWorkspace.id, userId: user.uid, reason: 'cleanup' });
+        socketRef.current.emit('leave-workspace', { workspaceId: activeWorkspace.id, userId: user.uid });
+      }
     };
-  }, [activeWorkspace?.id, user?.uid]);
+  }, [activeWorkspace?.id, user?.uid, setActiveUserIds]);
 
   useEffect(() => {
     if (!activeWorkspace || !user || lastActiveUsersRef.current.length === 0) return;
@@ -141,6 +149,22 @@ export function useSocket() {
     });
     updateMemberOnlineStatus(lastActiveUsersRef.current, 'members-hydrated');
   }, [members, activeWorkspace?.id, user?.uid]);
+
+  useEffect(() => {
+    const onBeforeUnload = () => {
+      if (socketRef.current && activeWorkspace?.id && user?.uid) {
+        console.log('[Trace][Socket] leave-workspace emit', {
+          workspaceId: activeWorkspace.id,
+          userId: user.uid,
+          reason: 'beforeunload',
+        });
+        socketRef.current.emit('leave-workspace', { workspaceId: activeWorkspace.id, userId: user.uid });
+      }
+    };
+
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [activeWorkspace?.id, user?.uid]);
 
   // Update member online status based on active users list (preserve other member data)
   const updateMemberOnlineStatus = (activeUserIds: string[], source: string) => {

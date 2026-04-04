@@ -32,7 +32,7 @@ interface MainLayoutProps {
 
 export function MainLayout({ children }: MainLayoutProps) {
   const { user } = useAuthStore();
-  const { activeWorkspace, members, decisions, risks, userRole } = useWorkspaceStore();
+  const { activeWorkspace, members, activeUserIds, decisions, risks, userRole } = useWorkspaceStore();
   const { activeView, setActiveView, setModal } = useUIStore();
   const navigate = useNavigate();
   const location = useLocation();
@@ -67,6 +67,7 @@ export function MainLayout({ children }: MainLayoutProps) {
   ];
 
   const handleLogout = () => auth.signOut();
+  const onlineMembers = members.filter((member) => member.isOnline || activeUserIds.includes(member.uid));
   const handleNavClick = (id: string) => {
     console.log('[Trace][UI][MainLayout] nav click', { id });
     setActiveView(id as any);
@@ -247,23 +248,25 @@ export function MainLayout({ children }: MainLayoutProps) {
           <div className="mt-auto">
             <div className="flex items-center gap-2 mb-4 px-1">
               <Users className="w-4 h-4 text-music-red" />
-              <h3 className="text-xs font-bold uppercase tracking-widest text-white/40">Active Members</h3>
+              <h3 className="text-xs font-bold uppercase tracking-widest text-white/40">{onlineMembers.length} Members Online</h3>
             </div>
+            <p className="text-[10px] text-white/35 mb-3 px-1 truncate">
+              {onlineMembers.length > 0
+                ? onlineMembers.map((member) => member.displayName).join(', ')
+                : 'No active members right now'}
+            </p>
             <div className="flex flex-wrap gap-2">
-              {members.map((m) => (
+              {onlineMembers.map((m) => (
                 <div key={m.uid} className="relative group">
                   <img 
                     src={m.photoURL || `https://ui-avatars.com/api/?name=${m.displayName}`} 
                     className={cn(
-                      "w-8 h-8 rounded-full border border-white/10 transition-transform group-hover:scale-110",
-                      m.isOnline ? "ring-2 ring-emerald-400/50" : "opacity-50 grayscale"
+                      "w-8 h-8 rounded-full border border-white/10 transition-transform group-hover:scale-110 ring-2 ring-emerald-400/50"
                     )}
                     title={m.displayName}
                     alt={m.displayName}
                   />
-                  {m.isOnline && (
-                    <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-400 rounded-full border-2 border-[#12121A]" />
-                  )}
+                  <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-400 rounded-full border-2 border-[#12121A]" />
                 </div>
               ))}
             </div>

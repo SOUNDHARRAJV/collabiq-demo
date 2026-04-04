@@ -7,19 +7,25 @@ interface ConfirmModalProps {
   onClose: () => void;
   onConfirm: () => void | Promise<void>;
   title: string;
-  message: string;
+  message?: string;
+  description?: string;
   confirmText?: string;
   cancelText?: string;
   isDanger?: boolean;
+  loading?: boolean;
 }
 
-export const ConfirmModal = ({ isOpen, onClose, onConfirm, title, message, confirmText = 'Confirm', cancelText = 'Cancel', isDanger = false }: ConfirmModalProps) => {
+export const ConfirmModal = ({ isOpen, onClose, onConfirm, title, message, description, confirmText = 'Confirm', cancelText = 'Cancel', isDanger = false, loading = false }: ConfirmModalProps) => {
+  const bodyMessage = description ?? message ?? '';
+
   const handleCancel = () => {
+    if (loading) return;
     console.log('[Trace][UI][ConfirmModal] cancel click', { title, isOpen });
     onClose();
   };
 
   const handleConfirm = async () => {
+    if (loading) return;
     console.log('[Trace][UI][ConfirmModal] confirm click', { title, isOpen, isDanger });
     try {
       await onConfirm();
@@ -30,25 +36,27 @@ export const ConfirmModal = ({ isOpen, onClose, onConfirm, title, message, confi
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={title} description={message} icon={AlertTriangle}>
+    <Modal isOpen={isOpen} onClose={onClose} title={title} description={bodyMessage} icon={AlertTriangle}>
       <div className="space-y-8">
         <div className="flex gap-4 pt-4">
           <button 
             type="button"
             onClick={handleCancel}
+            disabled={loading}
             className="flex-1 py-4 bg-white/5 hover:bg-white/10 rounded-2xl text-xs font-bold uppercase tracking-widest transition-all btn-press text-white/60 border border-white/5"
           >
             {cancelText}
           </button>
           <button 
             onClick={handleConfirm}
+            disabled={loading}
             className={`flex-1 py-4 rounded-2xl text-xs font-bold uppercase tracking-widest transition-all shadow-lg btn-press ${
               isDanger 
                 ? 'bg-red-500 text-white hover:bg-red-600 shadow-red-500/20' 
                 : 'bg-gradient-to-br from-music-red to-music-purple text-white shadow-music-red/20'
             }`}
           >
-            {confirmText}
+            {loading ? 'Processing...' : confirmText}
           </button>
         </div>
       </div>
